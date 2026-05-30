@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AMeDAS Explorer - HIG Edition</title>
+    <title>AMeDAS Explorer - Professional Edition</title>
 
     <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
@@ -20,6 +20,7 @@
             --accent-color: #0A84FF;
             --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
             --rail-width: 68px;
+            --drawer-width: 320px;
         }
 
         body {
@@ -32,7 +33,7 @@
             overflow: hidden;
         }
 
-        /* ========== Navigation Rail ========== */
+        /* Navigation Rail */
         #nav-rail {
             width: var(--rail-width);
             height: 100%;
@@ -44,8 +45,7 @@
             flex-direction: column;
             align-items: center;
             padding: 20px 0;
-            z-index: 1000;
-            position: relative;
+            z-index: 2000;
         }
 
         .nav-btn {
@@ -56,7 +56,7 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             color: var(--text-secondary);
         }
 
@@ -68,12 +68,12 @@
         .nav-btn svg { width: 24px; height: 24px; }
         .spacer { flex: 1; }
 
-        /* ========== Drawer Panel (Ranking) ========== */
+        /* Drawer Panel */
         #drawer-panel {
             position: absolute;
             left: var(--rail-width);
             top: 0;
-            width: 320px;
+            width: var(--drawer-width);
             height: 100%;
             background: var(--surface-drawer);
             backdrop-filter: blur(25px);
@@ -81,14 +81,14 @@
             border-right: 1px solid var(--border-color);
             transform: translateX(-100%);
             transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-            z-index: 999;
+            z-index: 1000;
             display: flex;
             flex-direction: column;
         }
         #drawer-panel.show { transform: translateX(0); }
         
         .drawer-header {
-            padding: 20px;
+            padding: 24px 20px;
             font-size: 18px;
             font-weight: 700;
             border-bottom: 1px solid var(--border-color);
@@ -114,49 +114,61 @@
         .rank-name { flex: 1; font-weight: 500; font-size: 14px; }
         .rank-val { font-weight: 700; font-size: 16px; }
 
-        /* ========== Map Container ========== */
+        /* Map */
         #map { flex: 1; height: 100%; position: relative; }
 
-        /* ========== Floating Detail Card ========== */
-        #detail-card {
+        /* Floating Cards */
+        #detail-card, #legend-card {
             position: absolute;
-            bottom: 30px;
-            left: 20px;
-            width: 280px;
             background: var(--surface-drawer);
             backdrop-filter: blur(30px);
             -webkit-backdrop-filter: blur(30px);
             border-radius: 20px;
             border: 1px solid var(--border-color);
-            padding: 20px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            transform: translateY(120%);
-            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-            z-index: 1001;
+            z-index: 1500;
+            transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
+
+        #detail-card {
+            bottom: 30px;
+            left: 20px; 
+            width: 280px;
+            padding: 20px;
+            transform: translateY(120%);
+        }
+        
+        body.drawer-open #detail-card { left: calc(var(--drawer-width) + 20px); }
         #detail-card.show { transform: translateY(0); }
 
-        .card-header { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
-        .card-time { font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; }
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .data-item {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 10px; border-radius: 12px; display: flex; flex-direction: column;
+        #close-detail {
+            position: absolute; top: 12px; left: 12px;
+            width: 24px; height: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; color: var(--text-secondary);
         }
-        .data-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 2px; }
+
+        #legend-card { bottom: 30px; right: 20px; min-width: 150px; padding: 16px; }
+
+        .card-header { font-size: 16px; font-weight: 700; margin-bottom: 8px; text-align: center; }
+        .card-time { font-size: 11px; color: var(--text-secondary); margin-bottom: 12px; text-align: center; }
+        
+        .legend-item { display: flex; align-items: center; margin-bottom: 6px; font-size: 12px; color: var(--text-secondary); }
+        .legend-color { width: 12px; height: 12px; border-radius: 3px; margin-right: 10px; border: 1px solid rgba(255,255,255,0.2); }
+
+        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .data-item { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 12px; display: flex; flex-direction: column; }
+        .data-label { font-size: 10px; color: var(--text-secondary); }
         .data-value { font-size: 16px; font-weight: 600; }
         .data-value span { font-size: 12px; font-weight: 400; margin-left: 2px; }
 
-        /* ========== Status Bar ========== */
         #status-bar {
-            position: absolute;
-            top: 20px; right: 20px;
+            position: absolute; top: 20px; right: 20px;
             background: var(--surface-color);
             backdrop-filter: blur(20px);
-            padding: 8px 16px;
-            border-radius: 40px;
-            font-size: 12px;
-            border: 1px solid var(--border-color);
+            padding: 8px 16px; border-radius: 40px;
+            font-size: 12px; border: 1px solid var(--border-color);
             z-index: 1000;
         }
     </style>
@@ -164,20 +176,25 @@
 <body>
 
     <nav id="nav-rail">
-        <div class="nav-btn active" id="btn-temp" title="気温レイヤー">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+        <div class="nav-btn" id="btn-temp" title="気温レイヤー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
         </div>
-        <div class="nav-btn" id="btn-prec" title="降水量・警報レイヤー">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 1 18 20a5 5 0 1 1-6-8.58V5a2 2 0 1 1 4 0v6.42a4.99 4.99 0 0 1 4 6.16z"/></svg>
+        <div class="nav-btn" id="btn-prec" title="降水量レイヤー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17.58A5 5 0 0 1 18 20a5 5 0 1 1-6-8.58V5a2 2 0 1 1 4 0v6.42a4.99 4.99 0 0 1 4 6.16z"/></svg>
         </div>
         <div class="nav-btn" id="btn-wind" title="風向・風速レイヤー">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="17.5" y1="19" x2="17.5" y2="19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="12" y1="17" x2="22" y2="17"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="12" y1="17" x2="22" y2="17"/></svg>
         </div>
-        
+        <div class="nav-btn" id="btn-typhoon" title="台風情報レイヤー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0"/>
+                <path d="M12 9a9 9 0 0 1 9 9"/>
+                <path d="M12 15a9 9 0 0 1-9-9"/>
+            </svg>
+        </div>
         <div class="spacer"></div>
-        
         <div class="nav-btn" id="btn-rank" title="全国ランキング">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/></svg>
         </div>
     </nav>
 
@@ -189,27 +206,16 @@
     <div id="map">
         <div id="status-bar">データ読込中...</div>
         
+        <div id="legend-card">
+            <div class="card-header" id="legend-title">凡例</div>
+            <div id="legend-content"></div>
+        </div>
+
         <div id="detail-card">
-            <div class="card-header" id="st-name">地点名</div>
+            <div id="close-detail">×</div>
+            <div class="card-header" id="st-name" style="margin-top: 10px;">地点名</div>
             <div class="card-time" id="st-time">--:-- 観測</div>
-            <div class="data-grid">
-                <div class="data-item">
-                    <span class="data-label">気温</span>
-                    <span class="data-value" id="val-temp">--<span>℃</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">降水量</span>
-                    <span class="data-value" id="val-prec">--<span>mm</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">風速</span>
-                    <span class="data-value" id="val-wind">--<span>m/s</span></span>
-                </div>
-                <div class="data-item">
-                    <span class="data-label">湿度</span>
-                    <span class="data-value" id="val-hum">--<span>%</span></span>
-                </div>
-            </div>
+            <div class="data-grid" id="detail-grid"></div>
         </div>
     </div>
 
@@ -217,253 +223,540 @@
         const JMA_BASE = "https://www.jma.go.jp/bosai/amedas";
         let map, amedasTable = {};
         let geojson = { type: 'FeatureCollection', features: [] };
-        let currentMode = 'temp'; // temp, prec, wind
+        let typhoonGeojson = { type: 'FeatureCollection', features: [] };
+        let currentMode = 'temp';
         let currentObsTime = '--:--';
 
-        // 矢印アイコン（風向用）の生成
-        const arrowSvg = `<svg viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg"><path d="M12 2 L20 20 L12 16 L4 20 Z" /></svg>`;
-        const arrowImg = new Image();
-        arrowImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(arrowSvg);
+        const arrowSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2.5 L20 10.5 L14 10.5 L14 21.5 L10 21.5 L10 10.5 L4 10.5 Z" fill="white" stroke="white" stroke-linejoin="round" stroke-width="1.5" />
+        </svg>`;
 
         function getTempColor(temp) {
-            if (temp === null) return '#8E8E93';
-            if (temp >= 35) return '#FF3B30';
-            if (temp >= 30) return '#FF9500';
-            if (temp >= 20) return '#FFCC00';
-            if (temp >= 10) return '#34C759';
-            if (temp >= 0)  return '#0A84FF';
-            return '#5856D6';
+            if (temp === null) return 'transparent';
+            if (temp >= 35) return '#B40068';
+            if (temp >= 30) return '#FF2800';
+            if (temp >= 25) return '#FF9900';
+            if (temp >= 20) return '#FFEF00';
+            if (temp >= 15) return '#99FF00';
+            if (temp >= 10) return '#00FF00';
+            if (temp >= 5)  return '#00FFFF';
+            if (temp >= 0)  return '#0099FF';
+            if (temp >= -5) return '#0000FF';
+            return '#10008F';
+        }
+
+        function getPrecColor(prec) {
+            if (prec === null || prec === 0) return 'transparent';
+            if (prec >= 80) return '#B40068';
+            if (prec >= 50) return '#FF2800';
+            if (prec >= 30) return '#FF9900';
+            if (prec >= 20) return '#FFEF00';
+            if (prec >= 10) return '#0000FF';
+            if (prec >= 1)  return '#0099FF';
+            return '#A0D2FF';
+        }
+
+        const windScales = [
+            { limit: 30, color: '#B40068', label: '30m/s以上 (猛烈な風)' },
+            { limit: 25, color: '#FF2800', label: '25〜30' },
+            { limit: 20, color: '#FF9900', label: '20〜25 (非常に強い)' },
+            { limit: 15, color: '#FFEF00', label: '15〜20 (強い風)' },
+            { limit: 10, color: '#00FF00', label: '10〜15 (やや強い)' },
+            { limit: 5,  color: '#00FFFF', label: '5〜10' },
+            { limit: 0,  color: '#0099FF', label: '5m/s未満' }
+        ];
+
+        // 気象庁のISO6709ベース座標（"+34.5+137.5/"）を [経度, 緯度] に変換
+        function parseJMACoord(coordStr) {
+            if (!coordStr) return null;
+            const match = coordStr.match(/([+-]\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)/);
+            if (match) {
+                const lat = parseFloat(match[1]);
+                const lon = parseFloat(match[2]);
+                return [lon, lat];
+            }
+            return null;
+        }
+
+        // --- 台風データの取得と空間処理（コアロジック） ---
+        async function fetchTyphoonData() {
+            const features = [];
+            try {
+                const res = await fetch('https://www.jma.go.jp/bosai/typhoon/data/TC.json');
+                
+                // 台風未発生時は404になるため、エラーとしてキャッチして空データを返す
+                if (!res.ok) throw new Error("現在発生中の台風はありません（または取得エラー）");
+                
+                const tcData = await res.json();
+                if (!tcData || tcData.length === 0) {
+                    return turf.featureCollection([]);
+                }
+
+                tcData.forEach(typhoon => {
+                    const current = typhoon.center ? typhoon.center : (typhoon.estimations ? typhoon.estimations[0] : null);
+                    if (!current || !current.coordinate) return;
+
+                    const centerPos = parseJMACoord(current.coordinate);
+                    if (!centerPos) return;
+
+                    // 1. 中心点の作成
+                    features.push(turf.point(centerPos, {
+                        type: 'center',
+                        name: `台風第${typhoon.typhoonNo}号 (${typhoon.name?.kana || ''})`,
+                        pressure: current.pressure || '不明',
+                        maxWind: current.wind?.center || current.windSpeed?.center || '不明',
+                        intensity: typhoon.intensity || '-',
+                        speed: typhoon.movement || '-'
+                    }));
+
+                    // 暴風域・強風域の描画（実況）
+                    if (current.stormArea && current.stormArea.base) {
+                        const radiusKm = (Array.isArray(current.stormArea.base) ? current.stormArea.base[0] : current.stormArea.base) / 1000;
+                        features.push(turf.circle(centerPos, radiusKm, { steps: 64, properties: { type: 'stormArea' } }));
+                    }
+                    if (current.windArea && current.windArea.base) {
+                        const radiusKm = (Array.isArray(current.windArea.base) ? current.windArea.base[0] : current.windArea.base) / 1000;
+                        features.push(turf.circle(centerPos, radiusKm, { steps: 64, properties: { type: 'windArea' } }));
+                    }
+
+                    // 2. 予報円と警戒領域（ポリゴン結合）の生成
+                    if (typhoon.forecasts && typhoon.forecasts.length > 0) {
+                        const forecastTrack = [centerPos];
+                        let previousCircle = turf.circle(centerPos, 1, { steps: 64, units: 'kilometers' });
+                        let warningAreaSegments = []; // 凸包で生成した部分的なポリゴンを格納する配列
+
+                        typhoon.forecasts.forEach(forecast => {
+                            const fPos = parseJMACoord(forecast.coordinate);
+                            if (!fPos) return;
+
+                            forecastTrack.push(fPos);
+                            
+                            // 予報円の半径 (m -> km)
+                            let radiusKm = 50; 
+                            if (forecast.probabilityCircle && forecast.probabilityCircle.base) {
+                                radiusKm = (Array.isArray(forecast.probabilityCircle.base) ? forecast.probabilityCircle.base[0] : forecast.probabilityCircle.base) / 1000; 
+                            }
+
+                            // 予報円の生成（点線描画用）
+                            const currentCircle = turf.circle(fPos, radiusKm, {
+                                steps: 64, units: 'kilometers',
+                                properties: { type: 'forecastCircle' }
+                            });
+                            features.push(currentCircle);
+
+                            // 【Step 1】直前の円と今回の円で「凸包」を生成し、扇形のカプセルを作る
+                            const combinedPoints = turf.explode(turf.featureCollection([previousCircle, currentCircle]));
+                            const warningAreaSegment = turf.convex(combinedPoints);
+                            
+                            if (warningAreaSegment) {
+                                warningAreaSegments.push(warningAreaSegment);
+                            }
+
+                            previousCircle = currentCircle;
+                        });
+
+                        // 予測軌跡ラインを追加
+                        features.push(turf.lineString(forecastTrack, { type: 'track' }));
+
+                        // 【Step 2】自己交差の削除（複数のカプセル状ポリゴンを結合する）
+                        if (warningAreaSegments.length > 0) {
+                            let finalWarningArea = warningAreaSegments[0]; // ベースとなる最初のポリゴン
+
+                            for (let i = 1; i < warningAreaSegments.length; i++) {
+                                // turf.unionを使って、重なる部分を溶接して一つにする（内側の線が消える）
+                                const unioned = turf.union(finalWarningArea, warningAreaSegments[i]);
+                                if (unioned) {
+                                    finalWarningArea = unioned;
+                                }
+                            }
+                            
+                            // 最終的に結合された1つの巨大なポリゴンに属性を付与
+                            finalWarningArea.properties = { type: 'forecastArea' };
+                            features.push(finalWarningArea);
+                        }
+                    }
+                });
+
+                return turf.featureCollection(features);
+
+            } catch (e) {
+                // 台風未発生時やネットワークエラー時はコンソールにエラーを出さず、空データを返す
+                return turf.featureCollection([]); 
+            }
         }
 
         async function init() {
-            // CartoDB Dark Matter（シンプルで黒い地図）を採用
-            map = new maplibregl.Map({
-                container: 'map',
-                style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-                center: [137.0, 38.0],
-                zoom: 5,
-                pitch: 40,
-                hash: true
+            const loadImage = (src) => new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = src;
             });
 
-            arrowImg.onload = () => map.addImage('wind-arrow', arrowImg);
+            map = new maplibregl.Map({
+                container: 'map',
+                style: {
+                    version: 8, sources: {},
+                    layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#000000' } }]
+                },
+                center: [137.0, 38.0], zoom: 5, pitch: 40, hash: true
+            });
 
             map.on('load', async () => {
                 try {
-                    // 日本の都道府県境界線を明示的に追加（白黒デザインに合わせてグレーで表現）
-                    map.addSource('pref-boundary', {
-                        type: 'geojson',
-                        data: 'https://raw.githubusercontent.com/dataofjapan/land/master/japan.geojson'
-                    });
+                    const arrowImg = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(arrowSvg));
+                    map.addImage('wind-arrow', arrowImg, { sdf: true });
+
+                    // ローカル環境で404にならないよう、オンラインのGeoJSONデータソースを使用
+                    map.addSource('world', { type: 'geojson', data: 'https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json' });
+                    map.addLayer({ id: 'world-fill', type: 'fill', source: 'world', paint: { 'fill-color': '#1a1a1a' } });
+                    map.addLayer({ id: 'world-line', type: 'line', source: 'world', paint: { 'line-color': '#333333', 'line-width': 1 } });
+
+                    map.addSource('prefectures', { type: 'geojson', data: 'https://raw.githubusercontent.com/dataofjapan/land/master/japan.geojson' });
+                    map.addLayer({ id: 'pref-fill', type: 'fill', source: 'prefectures', paint: { 'fill-color': '#222222' } });
+                    map.addLayer({ id: 'pref-line', type: 'line', source: 'prefectures', paint: { 'line-color': '#555555', 'line-width': 1.5, 'line-opacity': 0.8 } });
+
+                    // --- 台風データのレイヤー設定 ---
+                    typhoonGeojson = await fetchTyphoonData();
+                    map.addSource('typhoon', { type: 'geojson', data: typhoonGeojson });
+                    
+                    // 警戒領域（結合されたポリゴン）の塗りつぶし
                     map.addLayer({
-                        id: 'pref-line',
-                        type: 'line',
-                        source: 'pref-boundary',
-                        paint: { 'line-color': '#555555', 'line-width': 1.5, 'line-opacity': 0.8 }
+                        id: 'layer-typhoon-forecast-fill',
+                        type: 'fill',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['==', 'type', 'forecastArea'],
+                        paint: { 'fill-color': '#FFFFFF', 'fill-opacity': 0.1 }
                     });
 
-                    // 気象庁データの取得
+                    // 警戒領域（結合されたポリゴン）の外枠線（美しく繋がった実線）
+                    map.addLayer({
+                        id: 'layer-typhoon-forecast-area-line',
+                        type: 'line',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['==', 'type', 'forecastArea'],
+                        paint: { 'line-color': '#FFFFFF', 'line-width': 1.5, 'line-opacity': 0.6 }
+                    });
+
+                    // 個別の予報円（点線）
+                    map.addLayer({
+                        id: 'layer-typhoon-forecast-circle-line',
+                        type: 'line',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['==', 'type', 'forecastCircle'],
+                        paint: { 'line-color': '#FFFFFF', 'line-width': 1, 'line-dasharray': [3, 4], 'line-opacity': 0.5 }
+                    });
+
+                    // 暴風域・強風域
+                    map.addLayer({
+                        id: 'layer-typhoon-area',
+                        type: 'fill',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['in', 'type', 'stormArea', 'windArea'],
+                        paint: {
+                            'fill-color': ['match', ['get', 'type'], 'stormArea', '#FF2800', 'windArea', '#FFEF00', '#FFFFFF'],
+                            'fill-opacity': 0.35
+                        }
+                    });
+
+                    // 中心軌跡
+                    map.addLayer({
+                        id: 'layer-typhoon-track',
+                        type: 'line',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['==', 'type', 'track'],
+                        paint: { 'line-color': '#FFFFFF', 'line-width': 2, 'line-dasharray': [3, 3] }
+                    });
+
+                    // 中心点
+                    map.addLayer({
+                        id: 'layer-typhoon-center',
+                        type: 'circle',
+                        source: 'typhoon',
+                        layout: { 'visibility': 'none' },
+                        filter: ['==', 'type', 'center'],
+                        paint: { 'circle-radius': 8, 'circle-color': '#FF2800', 'circle-stroke-width': 2, 'circle-stroke-color': '#FFFFFF' }
+                    });
+
+                    // --- AMeDASデータの取得 ---
                     const timeRes = await fetch(`${JMA_BASE}/data/latest_time.txt`);
-                    const datetime = (await timeRes.text()).trim();
-                    currentObsTime = `${datetime.substring(8,10)}:${datetime.substring(10,12)}`;
+                    const datetime = (await timeRes.text()).trim(); 
+                    const mapTime = datetime.replace(/[-T:]/g, '').substring(0, 14);
+                    currentObsTime = `${mapTime.substring(8,10)}:${mapTime.substring(10,12)}`;
                     document.getElementById('status-bar').innerText = `LIVE: ${currentObsTime} 更新`;
 
                     const [tableRes, dataRes] = await Promise.all([
                         fetch(`${JMA_BASE}/const/amedastable.json`),
-                        fetch(`${JMA_BASE}/data/map/${datetime}.json`)
+                        fetch(`${JMA_BASE}/data/map/${mapTime}.json`)
                     ]);
                     amedasTable = await tableRes.json();
                     const amedasData = await dataRes.json();
 
-                    // GeoJSON Featureの作成
                     geojson.features = Object.keys(amedasData).map(id => {
                         const master = amedasTable[id];
                         if (!master) return null;
                         const obs = amedasData[id];
-                        const temp = obs.temp ? obs.temp[0] : null;
-                        const prec = obs.precipitation1h ? obs.precipitation1h[0] : 0;
-                        const wind = obs.wind ? obs.wind[0] : null;
-                        const windDir = obs.wind && obs.wind[1] !== undefined ? obs.wind[1] : 0;
                         
+                        const temp = obs.temp !== undefined ? obs.temp[0] : null;
+                        const prec = obs.precipitation1h !== undefined ? obs.precipitation1h[0] : null;
+                        const windSpd = obs.wind !== undefined ? obs.wind[0] : null;
+                        const windDir = obs.windDirection !== undefined ? obs.windDirection[0] : 0; 
+
                         return {
                             type: 'Feature',
                             geometry: { type: 'Point', coordinates: [master.lon[0] + master.lon[1]/60, master.lat[0] + master.lat[1]/60] },
                             properties: {
-                                id, name: master.kjName,
-                                temp: temp, prec: prec, wind: wind, windDir: windDir, hum: obs.humidity ? obs.humidity[0] : null,
+                                id, type: 'amedas', name: master.kjName,
+                                temp: temp, prec: prec, wind: windSpd, windDir: windDir, 
+                                hum: obs.humidity !== undefined ? obs.humidity[0] : null,
+                                sortTemp: temp !== null ? temp : -100,
+                                sortPrec: prec !== null ? prec : -1,
+                                sortWind: windSpd !== null ? windSpd : -1,
                                 tempColor: getTempColor(temp),
-                                precColor: prec >= 20 ? '#FF3B30' : (prec >= 10 ? '#FF9500' : (prec > 0 ? '#0A84FF' : '#444444'))
+                                precColor: getPrecColor(prec)
                             }
                         };
                     }).filter(f => f !== null && f.geometry.coordinates[0]);
 
-                    // ★警報レイヤー（Voronoi ポリゴン生成）
-                    // Turf.jsを使って観測点から疑似的なエリアメッシュを作成
-                    const voronoiPolys = turf.voronoi(geojson, { bbox: [122.9, 24.0, 153.9, 45.6] });
-                    voronoiPolys.features.forEach((poly, i) => {
-                        if (poly) poly.properties = geojson.features[i].properties;
-                    });
-                    voronoiPolys.features = voronoiPolys.features.filter(p => p != null);
-
-                    // 警報（大雨エリア）レイヤー追加
-                    map.addSource('voronoi', { type: 'geojson', data: voronoiPolys });
-                    map.addLayer({
-                        id: 'layer-prec-area',
-                        type: 'fill',
-                        source: 'voronoi',
-                        layout: { 'visibility': 'none' },
-                        paint: {
-                            'fill-color': ['get', 'precColor'],
-                            'fill-opacity': ['case', ['>', ['get', 'prec'], 0], 0.35, 0], // 雨が降っているエリアだけ色付け
-                            'fill-outline-color': 'transparent'
-                        }
-                    }, 'pref-line'); // 都道府県境界線の下に敷く
-
-                    // アメダス地点ソース追加
                     map.addSource('amedas', { type: 'geojson', data: geojson });
-
-                    // 気温・降水量のサークルレイヤー
-                    map.addLayer({
-                        id: 'layer-points',
-                        type: 'circle',
+                    
+                    map.addLayer({ 
+                        id: 'layer-points', 
+                        type: 'circle', 
+                        source: 'amedas', 
+                        filter: ['!=', ['get', 'temp'], null],
+                        layout: { 'circle-sort-key': ['get', 'sortTemp'] },
+                        paint: { 
+                            'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 10, 12], 
+                            'circle-color': ['get', 'tempColor'], 
+                            'circle-stroke-width': 1.5, 
+                            'circle-stroke-color': '#000000' 
+                        } 
+                    });
+                    
+                    map.addLayer({ 
+                        id: 'layer-wind', 
+                        type: 'symbol', 
                         source: 'amedas',
-                        paint: {
-                            'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 10, 12],
-                            'circle-color': ['get', 'tempColor'],
-                            'circle-stroke-width': 1.5,
-                            'circle-stroke-color': '#000000'
-                        }
+                        filter: ['!=', ['get', 'wind'], null],
+                        layout: { 
+                            'visibility': 'none', 
+                            'icon-image': 'wind-arrow', 
+                            'symbol-sort-key': ['get', 'sortWind'],
+                            'icon-size': ['interpolate', ['linear'], ['get', 'wind'], 0, 0.4, 2, 0.6, 5, 1.0, 10, 1.6, 20, 2.4],
+                            'icon-rotate': ['+', ['*', ['get', 'windDir'], 22.5], 180], 
+                            'icon-allow-overlap': true,
+                            'icon-ignore-placement': true 
+                        }, 
+                        paint: { 
+                            'icon-opacity': ['case', ['==', ['get', 'windDir'], 0], 0, 1],
+                            'icon-color': ['step', ['get', 'wind'], '#0099FF', 5, '#00FFFF', 10, '#00FF00', 15, '#FFEF00', 20, '#FF9900', 25, '#FF2800', 30, '#B40068']
+                        } 
                     });
 
-                    // ★風向・風速レイヤー（矢印アイコン）
-                    map.addLayer({
-                        id: 'layer-wind',
-                        type: 'symbol',
-                        source: 'amedas',
-                        layout: {
-                            'visibility': 'none',
-                            'icon-image': 'wind-arrow',
-                            'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.4, 10, 0.8],
-                            // 風向(1=NNE...16=N)から角度を計算。風が吹いていく方向に矢印を向けるため+180度
-                            'icon-rotate': ['+', ['*', ['get', 'windDir'], 22.5], 180],
-                            'icon-allow-overlap': true
-                        },
-                        paint: {
-                            // 無風（windDir == 0）の場合は非表示
-                            'icon-opacity': ['case', ['==', ['get', 'windDir'], 0], 0, 1]
-                        }
-                    });
-
-                    // インタラクション
                     map.on('click', 'layer-points', (e) => showDetail(e.features[0].properties));
                     map.on('click', 'layer-wind', (e) => showDetail(e.features[0].properties));
-                    ['layer-points', 'layer-wind'].forEach(l => {
-                        map.on('mouseenter', l, () => map.getCanvas().style.cursor = 'pointer');
-                        map.on('mouseleave', l, () => map.getCanvas().style.cursor = '');
+                    map.on('click', 'layer-typhoon-center', (e) => showDetail(e.features[0].properties));
+                    
+                    // マウスカーソルをポインターにする
+                    ['layer-points', 'layer-wind', 'layer-typhoon-center'].forEach(layer => {
+                        map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+                        map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
                     });
 
-                    // 初期ランキング表示用
-                    updateRanking();
-
-                } catch (e) {
-                    console.error(e);
-                    document.getElementById('status-bar').innerText = "データ取得エラー";
-                }
+                    setMode('temp', false);
+                } catch (e) { console.error("Initialization failed:", e); }
             });
         }
 
-        // --- モード切替制御 ---
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(`btn-${mode}`).classList.add('active');
-
-            if (mode === 'temp') {
-                map.setLayoutProperty('layer-points', 'visibility', 'visible');
-                map.setPaintProperty('layer-points', 'circle-color', ['get', 'tempColor']);
-                map.setLayoutProperty('layer-prec-area', 'visibility', 'none');
-                map.setLayoutProperty('layer-wind', 'visibility', 'none');
-            } else if (mode === 'prec') {
-                map.setLayoutProperty('layer-points', 'visibility', 'visible');
-                map.setPaintProperty('layer-points', 'circle-color', ['get', 'precColor']);
-                map.setLayoutProperty('layer-prec-area', 'visibility', 'visible');
-                map.setLayoutProperty('layer-wind', 'visibility', 'none');
-            } else if (mode === 'wind') {
-                map.setLayoutProperty('layer-points', 'visibility', 'none');
-                map.setLayoutProperty('layer-prec-area', 'visibility', 'none');
-                map.setLayoutProperty('layer-wind', 'visibility', 'visible');
+        function handleNavClick(mode) {
+            const drawer = document.getElementById('drawer-panel');
+            const isOpen = drawer.classList.contains('show');
+            if (currentMode === mode && isOpen) {
+                toggleDrawer(false);
+            } else {
+                setMode(mode, true);
             }
-            
-            // ドロワーが開いている場合はランキングの内容も即座に更新する
-            updateRanking();
         }
 
-        // --- ランキング生成処理 ---
+        function toggleDrawer(forceOpen = null) {
+            const drawer = document.getElementById('drawer-panel');
+            const targetState = (forceOpen !== null) ? forceOpen : !drawer.classList.contains('show');
+            if (targetState) {
+                drawer.classList.add('show');
+                document.body.classList.add('drawer-open');
+                document.getElementById('btn-rank').classList.add('active');
+                updateRanking();
+            } else {
+                drawer.classList.remove('show');
+                document.body.classList.remove('drawer-open');
+                document.getElementById('btn-rank').classList.remove('active');
+            }
+        }
+
+        function setMode(mode, openDrawer = true) {
+            currentMode = mode;
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            if(mode !== 'rank') document.getElementById(`btn-${mode}`).classList.add('active');
+            
+            if (map.getLayer('layer-points')) {
+                const pointsVis = (mode === 'temp' || mode === 'prec') ? 'visible' : 'none';
+                const windVis = (mode === 'wind') ? 'visible' : 'none';
+                map.setLayoutProperty('layer-points', 'visibility', pointsVis);
+                map.setLayoutProperty('layer-wind', 'visibility', windVis);
+                
+                // 台風レイヤーの表示制御
+                const typhoonVis = (mode === 'typhoon') ? 'visible' : 'none';
+                map.setLayoutProperty('layer-typhoon-area', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-track', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-fill', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-area-line', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-circle-line', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-center', 'visibility', typhoonVis);
+                
+                if (mode === 'temp' || mode === 'prec') {
+                    map.setPaintProperty('layer-points', 'circle-color', mode === 'temp' ? ['get', 'tempColor'] : ['get', 'precColor']);
+                    map.setLayoutProperty('layer-points', 'circle-sort-key', mode === 'temp' ? ['get', 'sortTemp'] : ['get', 'sortPrec']);
+                    map.setFilter('layer-points', ['!=', ['get', mode === 'temp' ? 'temp' : 'prec'], null]);
+                } else if (mode === 'wind') {
+                    map.setFilter('layer-wind', ['!=', ['get', 'wind'], null]);
+                }
+            }
+            if(openDrawer) toggleDrawer(true);
+            updateLegend();
+        }
+
+        function updateLegend() {
+            const container = document.getElementById('legend-content');
+            const title = document.getElementById('legend-title');
+            container.innerHTML = '';
+            let items = [];
+            
+            if (currentMode === 'temp') {
+                title.innerText = "気温 (℃)";
+                items = [
+                    { color: '#B40068', label: '35以上 (猛暑日)' }, { color: '#FF2800', label: '30〜35 (真夏日)' },
+                    { color: '#FF9900', label: '25〜30 (夏日)' }, { color: '#FFEF00', label: '20〜25' },
+                    { color: '#99FF00', label: '15〜20' }, { color: '#00FF00', label: '10〜15' },
+                    { color: '#00FFFF', label: '5〜10' }, { color: '#0099FF', label: '0〜5' },
+                    { color: '#0000FF', label: '-5〜0' }, { color: '#10008F', label: '-5未満 (冬日)' }
+                ];
+            } else if (currentMode === 'prec') {
+                title.innerText = "降水量 (mm/h)";
+                items = [
+                    { color: '#B40068', label: '80以上 (猛烈な雨)' }, { color: '#FF2800', label: '50〜80 (非常に激しい)' },
+                    { color: '#FF9900', label: '30〜50 (激しい雨)' }, { color: '#FFEF00', label: '20〜30 (強い雨)' },
+                    { color: '#0000FF', label: '10〜20 (やや強い)' }, { color: '#0099FF', label: '1〜10' },
+                    { color: '#A0D2FF', label: '0.1〜1' }
+                ];
+            } else if (currentMode === 'wind') {
+                title.innerText = "風速 (m/s)";
+                items = [...windScales];
+            } else if (currentMode === 'typhoon') {
+                title.innerText = "台風情報";
+                items = [
+                    { color: '#FF2800', label: '暴風域 (25m/s以上)' },
+                    { color: '#FFEF00', label: '強風域 (15m/s以上)' },
+                    { color: 'rgba(255, 255, 255, 0.4)', label: '警戒領域・予報円' }
+                ];
+            }
+            
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'legend-item';
+                div.innerHTML = `<div class="legend-color" style="background:${item.color}; border: 1px solid rgba(255,255,255,0.4);"></div><span>${item.label}</span>`;
+                container.appendChild(div);
+            });
+            
+            if(currentMode === 'wind') {
+                container.insertAdjacentHTML('beforeend', '<div style="font-size:10px; color:var(--text-secondary); margin-top:8px; border-top:1px solid var(--border-color); padding-top:8px;">※風速が強いほど矢印の長さ・太さが拡大します。</div>');
+            } else if (currentMode === 'typhoon') {
+                container.insertAdjacentHTML('beforeend', '<div style="font-size:10px; color:var(--text-secondary); margin-top:8px; border-top:1px solid var(--border-color); padding-top:8px;">※白い実線は警戒領域、点線は個別の予報円<br>※赤い点は台風の中心位置</div>');
+            }
+        }
+
         function updateRanking() {
             const list = document.getElementById('ranking-list');
             list.innerHTML = '';
             
+            if (currentMode === 'typhoon') {
+                document.getElementById('rank-title').innerText = '現在の台風情報';
+                const typhoons = typhoonGeojson.features.filter(f => f.properties.type === 'center');
+                
+                if (typhoons.length === 0) {
+                    list.innerHTML = '<div style="padding:15px; color:var(--text-secondary); font-size:14px;">現在、発生中の台風はありません。</div>';
+                } else {
+                    typhoons.forEach((f) => {
+                        const item = document.createElement('div');
+                        item.className = 'rank-item';
+                        item.innerHTML = `<div><span class="rank-name" style="color:var(--accent-color);">${f.properties.name}</span></div><span class="rank-val" style="font-size:14px;">${f.properties.pressure}hPa / ${f.properties.maxWind}m/s</span>`;
+                        item.onclick = () => { map.flyTo({ center: f.geometry.coordinates, zoom: 6 }); showDetail(f.properties); };
+                        list.appendChild(item);
+                    });
+                }
+                return;
+            }
+
             let sorted = [];
             if (currentMode === 'temp') {
-                document.getElementById('rank-title').innerText = '全国気温ランキング (高温順)';
+                document.getElementById('rank-title').innerText = '全国気温ランキング';
                 sorted = geojson.features.filter(f => f.properties.temp !== null).sort((a,b) => b.properties.temp - a.properties.temp);
             } else if (currentMode === 'prec') {
                 document.getElementById('rank-title').innerText = '全国降水量ランキング';
                 sorted = geojson.features.filter(f => f.properties.prec > 0).sort((a,b) => b.properties.prec - a.properties.prec);
-            } else if (currentMode === 'wind') {
+            } else {
                 document.getElementById('rank-title').innerText = '全国風速ランキング';
                 sorted = geojson.features.filter(f => f.properties.wind !== null).sort((a,b) => b.properties.wind - a.properties.wind);
             }
-            
             sorted.slice(0, 50).forEach((f, i) => {
-                let valStr = '', colorStr = var(--text-primary);
-                if (currentMode === 'temp') { valStr = `${f.properties.temp}℃`; colorStr = f.properties.tempColor; }
-                if (currentMode === 'prec') { valStr = `${f.properties.prec}mm`; colorStr = f.properties.precColor; }
-                if (currentMode === 'wind') { valStr = `${f.properties.wind}m/s`; colorStr = '#FFFFFF'; }
-                
                 const item = document.createElement('div');
                 item.className = 'rank-item';
-                item.innerHTML = `
-                    <div style="display:flex; align-items:center;">
-                        <span class="rank-num">${i+1}</span>
-                        <span class="rank-name">${f.properties.name}</span>
-                    </div>
-                    <span class="rank-val" style="color:${colorStr}">${valStr}</span>
-                `;
-                item.onclick = () => {
-                    map.flyTo({ center: f.geometry.coordinates, zoom: 10, essential: true });
-                    showDetail(f.properties);
-                };
+                const valStr = currentMode === 'temp' ? `${f.properties.temp}℃` : (currentMode === 'prec' ? `${f.properties.prec}mm` : `${f.properties.wind}m/s`);
+                item.innerHTML = `<div><span class="rank-num">${i+1}</span><span class="rank-name">${f.properties.name}</span></div><span class="rank-val">${valStr}</span>`;
+                item.onclick = () => { map.flyTo({ center: f.geometry.coordinates, zoom: 10 }); showDetail(f.properties); };
                 list.appendChild(item);
             });
         }
 
         function showDetail(props) {
             document.getElementById('st-name').innerText = props.name;
-            document.getElementById('st-time').innerText = `${currentObsTime} 観測`;
-            document.getElementById('val-temp').innerHTML = `${props.temp ?? '--'}<span>℃</span>`;
-            document.getElementById('val-prec').innerHTML = `${props.prec ?? '0'}<span>mm</span>`;
-            document.getElementById('val-wind').innerHTML = `${props.wind ?? '--'}<span>m/s</span>`;
-            document.getElementById('val-hum').innerHTML = `${props.hum ?? '--'}<span>%</span>`;
-            
+            const grid = document.getElementById('detail-grid');
+
+            if (props.type === 'center') {
+                document.getElementById('st-time').innerText = `現在位置と勢力`;
+                grid.innerHTML = `
+                    <div class="data-item"><span class="data-label">勢力</span><span class="data-value" style="font-size:14px;">${props.intensity}</span></div>
+                    <div class="data-item"><span class="data-label">移動</span><span class="data-value" style="font-size:14px;">${props.speed}</span></div>
+                    <div class="data-item"><span class="data-label">中心気圧</span><span class="data-value">${props.pressure}<span>hPa</span></span></div>
+                    <div class="data-item"><span class="data-label">最大風速</span><span class="data-value">${props.maxWind}<span>m/s</span></span></div>
+                `;
+            } else {
+                document.getElementById('st-time').innerText = `${currentObsTime} 観測`;
+                const formatVal = (val) => (val == null || val === 'undefined' || val === 'null' || val === '') ? '-' : val;
+                
+                grid.innerHTML = `
+                    <div class="data-item"><span class="data-label">気温</span><span class="data-value" id="val-temp">${formatVal(props.temp)}<span>℃</span></span></div>
+                    <div class="data-item"><span class="data-label">降水量</span><span class="data-value" id="val-prec">${formatVal(props.prec)}<span>mm</span></span></div>
+                    <div class="data-item"><span class="data-label">風速</span><span class="data-value" id="val-wind">${formatVal(props.wind)}<span>m/s</span></span></div>
+                    <div class="data-item"><span class="data-label">湿度</span><span class="data-value" id="val-hum">${formatVal(props.hum)}<span>%</span></span></div>
+                `;
+            }
+
             document.getElementById('detail-card').classList.add('show');
         }
 
-        // イベントリスナー
-        document.getElementById('btn-temp').onclick = () => setMode('temp');
-        document.getElementById('btn-prec').onclick = () => setMode('prec');
-        document.getElementById('btn-wind').onclick = () => setMode('wind');
-        document.getElementById('btn-rank').onclick = () => {
-            const drawer = document.getElementById('drawer-panel');
-            drawer.classList.toggle('show');
-            document.getElementById('btn-rank').classList.toggle('active');
-        };
-
-        // 地図外クリックで詳細カードを閉じる
-        document.getElementById('map').addEventListener('mousedown', (e) => {
-            if(e.target.id === 'map') document.getElementById('detail-card').classList.remove('show');
-        });
-
+        document.getElementById('btn-temp').onclick = () => handleNavClick('temp');
+        document.getElementById('btn-prec').onclick = () => handleNavClick('prec');
+        document.getElementById('btn-wind').onclick = () => handleNavClick('wind');
+        document.getElementById('btn-typhoon').onclick = () => handleNavClick('typhoon');
+        document.getElementById('btn-rank').onclick = () => toggleDrawer();
+        document.getElementById('close-detail').onclick = () => document.getElementById('detail-card').classList.remove('show');
+        
         init();
     </script>
 </body>
