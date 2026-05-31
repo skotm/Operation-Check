@@ -197,6 +197,32 @@
             pointer-events: auto;
             cursor: pointer;
         }
+
+        /* 警報バッジ */
+        .warn-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 4px;
+            white-space: nowrap;
+        }
+        .warn-badge.tokubetsu { background: #1a1a1a; color: #fff; border: 1px solid #666; }
+        .warn-badge.kiken     { background: #AA00AA; color: #fff; }
+        .warn-badge.keiho     { background: #FF2800; color: #fff; }
+        .warn-badge.chui      { background: #FFEF00; color: #000; }
+
+        .warn-rank-item {
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .warn-rank-item:hover { background: rgba(255,255,255,0.08); }
+        .warn-rank-area { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+        .warn-rank-badges { display: flex; flex-wrap: wrap; gap: 3px; }
     </style>
 </head>
 <body>
@@ -216,6 +242,13 @@
                 <path d="M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0"/>
                 <path d="M12 9a9 9 0 0 1 9 9"/>
                 <path d="M12 15a9 9 0 0 1-9-9"/>
+            </svg>
+        </div>
+        <div class="nav-btn" id="btn-warning" title="注意報・警報レイヤー">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
         </div>
         <div class="spacer"></div>
@@ -259,6 +292,74 @@
         let legendCollapsed = false;
         let currentMode = 'temp';
         let currentObsTime = '--:--';
+
+        // 警報関連
+        const WARNING_PREF_CODES = [
+            '011000','012000','013000','014100','015000','016000','017000',
+            '020000','030000','040000','050000','060000','070000','080000',
+            '090000','100000','110000','120000','130000','140000','150000',
+            '160000','170000','180000','190000','200000','210000','220000',
+            '230000','240000','250000','260000','270000','280000','290000',
+            '300000','310000','320000','330000','340000','350000','360000',
+            '370000','380000','390000','400000','410000',
+            '420000','430000','440000','450000','460100','471000','472000','473000','474000'
+        ];
+        // 警報種別コード → {name, level}
+        // level: 'tokubetsu'=特別警報, 'kiken'=危険警報, 'keiho'=警報, 'chui'=注意報
+        const WARNING_KIND_MAP = {
+            // 特別警報
+            '1':  { name: '大雨特別警報', level: 'tokubetsu' },
+            '2':  { name: '暴風特別警報', level: 'tokubetsu' },
+            '3':  { name: '高潮特別警報', level: 'tokubetsu' },
+            '4':  { name: '波浪特別警報', level: 'tokubetsu' },
+            '5':  { name: '暴風雪特別警報', level: 'tokubetsu' },
+            '6':  { name: '大雪特別警報', level: 'tokubetsu' },
+            '7':  { name: '氾濫特別警報', level: 'tokubetsu' },
+            // 危険警報（新設 2026年5月〜）
+            '14': { name: '大雨危険警報', level: 'kiken' },
+            '15': { name: '高潮危険警報', level: 'kiken' },
+            '16': { name: '土砂災害危険警報', level: 'kiken' },
+            '17': { name: '氾濫危険警報', level: 'kiken' },
+            // 警報
+            '10': { name: '大雨警報', level: 'keiho' },
+            '11': { name: '洪水警報', level: 'keiho' },
+            '12': { name: '暴風警報', level: 'keiho' },
+            '13': { name: '高潮警報', level: 'keiho' },
+            '18': { name: '波浪警報', level: 'keiho' },
+            '19': { name: '暴風雪警報', level: 'keiho' },
+            '20': { name: '大雪警報', level: 'keiho' },
+            '21': { name: '氾濫警報', level: 'keiho' },
+            '22': { name: '土砂災害警報', level: 'keiho' },
+            // 注意報
+            '30': { name: '大雨注意報', level: 'chui' },
+            '31': { name: '洪水注意報', level: 'chui' },
+            '32': { name: '強風注意報', level: 'chui' },
+            '33': { name: '風雪注意報', level: 'chui' },
+            '34': { name: '高潮注意報', level: 'chui' },
+            '35': { name: '波浪注意報', level: 'chui' },
+            '36': { name: '大雪注意報', level: 'chui' },
+            '37': { name: '雷注意報', level: 'chui' },
+            '38': { name: '濃霧注意報', level: 'chui' },
+            '39': { name: '乾燥注意報', level: 'chui' },
+            '40': { name: '霜注意報', level: 'chui' },
+            '41': { name: '着氷注意報', level: 'chui' },
+            '42': { name: '着雪注意報', level: 'chui' },
+            '43': { name: '融雪注意報', level: 'chui' },
+            '44': { name: 'なだれ注意報', level: 'chui' },
+            '45': { name: '低温注意報', level: 'chui' },
+            '46': { name: '氾濫注意報', level: 'chui' },
+            '47': { name: '土砂災害注意報', level: 'chui' },
+        };
+        const LEVEL_PRIORITY = { tokubetsu: 4, kiken: 3, keiho: 2, chui: 1 };
+        const LEVEL_COLOR = {
+            tokubetsu: '#1a1a1a',
+            kiken:     '#AA00AA',
+            keiho:     '#FF2800',
+            chui:      '#FFEF00',
+        };
+        // code → {level, kinds[]} の警報マップ（取得後に構築）
+        let warningMap = {};          // regioncode → {level, kinds}
+        let warningAreasGeojson = null;
 
         const arrowSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2.5 L20 10.5 L14 10.5 L14 21.5 L10 21.5 L10 10.5 L4 10.5 Z" fill="white" stroke="white" stroke-linejoin="round" stroke-width="1.5" />
@@ -475,6 +576,65 @@
                     forecastTimeMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(center).addTo(map));
                 });
         }
+        // ---- 警報データ取得 ----
+        async function fetchWarningData() {
+            warningMap = {};
+            const results = await Promise.allSettled(
+                WARNING_PREF_CODES.map(code =>
+                    fetch(`https://www.jma.go.jp/bosai/warning/data/r8/${code}.json`, { cache: 'no-store' })
+                        .then(r => r.ok ? r.json() : null)
+                        .catch(() => null)
+                )
+            );
+
+            results.forEach(result => {
+                if (result.status !== 'fulfilled' || !result.value) return;
+                const dataArr = result.value;
+                if (!Array.isArray(dataArr)) return;
+
+                dataArr.forEach(entry => {
+                    if (!entry?.warning?.class20Items) return;
+                    entry.warning.class20Items.forEach(item => {
+                        const regioncode = String(item.code ?? '');
+                        if (!regioncode) return;
+                        const kinds = (item.kinds ?? [])
+                            .filter(k => {
+                                const s = String(k.status ?? '');
+                                return s !== '解除' && s !== '' && s !== '0';
+                            })
+                            .map(k => WARNING_KIND_MAP[String(k.code)] ?? null)
+                            .filter(Boolean);
+                        if (kinds.length === 0) return;
+
+                        const topLevel = kinds.reduce((best, k) =>
+                            (LEVEL_PRIORITY[k.level] ?? 0) > (LEVEL_PRIORITY[best.level] ?? 0) ? k : best
+                        );
+                        warningMap[regioncode] = { level: topLevel.level, kinds };
+                    });
+                });
+            });
+        }
+
+        function applyWarningColors() {
+            if (!warningAreasGeojson || !map.getSource('warning-areas')) return;
+            const updated = {
+                ...warningAreasGeojson,
+                features: warningAreasGeojson.features.map(f => {
+                    const code = f.properties.regioncode;
+                    const warn = warningMap[code];
+                    return {
+                        ...f,
+                        properties: {
+                            ...f.properties,
+                            warnLevel: warn ? warn.level : '',
+                            warnColor: warn ? LEVEL_COLOR[warn.level] : 'transparent',
+                        }
+                    };
+                })
+            };
+            map.getSource('warning-areas').setData(updated);
+        }
+
         async function fetchJsonOrNull(url) {
             const res = await fetch(url, { cache: 'no-store' });
             if (!res.ok) return null;
@@ -743,6 +903,54 @@
                         paint: { 'circle-radius': 8, 'circle-color': '#FF2800', 'circle-stroke-width': 2, 'circle-stroke-color': '#FFFFFF' }
                     });
 
+                    // --- 警報エリアのレイヤー設定 ---
+                    warningAreasGeojson = await loadMapData('warning_areas.json');
+                    // 初期stateとしてwarnColor='transparent'を付与
+                    warningAreasGeojson = {
+                        ...warningAreasGeojson,
+                        features: warningAreasGeojson.features.map(f => ({
+                            ...f,
+                            properties: { ...f.properties, warnLevel: '', warnColor: 'transparent' }
+                        }))
+                    };
+                    map.addSource('warning-areas', { type: 'geojson', data: warningAreasGeojson });
+
+                    // 市区町村塗りつぶし
+                    map.addLayer({
+                        id: 'layer-warning-fill',
+                        type: 'fill',
+                        source: 'warning-areas',
+                        layout: { visibility: 'none' },
+                        paint: {
+                            'fill-color': ['get', 'warnColor'],
+                            'fill-opacity': 0.55
+                        }
+                    });
+
+                    // 市区町村境界線
+                    map.addLayer({
+                        id: 'layer-warning-line',
+                        type: 'line',
+                        source: 'warning-areas',
+                        layout: { visibility: 'none' },
+                        paint: {
+                            'line-color': 'rgba(255,255,255,0.25)',
+                            'line-width': 0.6
+                        }
+                    });
+
+                    // ポリゴンクリックで詳細表示
+                    map.on('click', 'layer-warning-fill', (e) => {
+                        const props = e.features[0].properties;
+                        if (!props.warnLevel) return;
+                        const code = props.regioncode;
+                        const warn = warningMap[code];
+                        if (!warn) return;
+                        showWarningDetail(props.name, warn.kinds);
+                    });
+                    map.on('mouseenter', 'layer-warning-fill', () => map.getCanvas().style.cursor = 'pointer');
+                    map.on('mouseleave', 'layer-warning-fill', () => map.getCanvas().style.cursor = '');
+
                     // --- AMeDASデータの取得 ---
                     const timeRes = await fetch(`${JMA_BASE}/data/latest_time.txt`);
                     const datetime = (await timeRes.text()).trim(); 
@@ -867,24 +1075,32 @@
             if(mode !== 'rank') document.getElementById(`btn-${mode}`).classList.add('active');
             
             if (map.getLayer('layer-points')) {
-                const pointsVis = (mode === 'temp' || mode === 'prec') ? 'visible' : 'none';
-                const windVis = (mode === 'wind') ? 'visible' : 'none';
+                const pointsVis   = (mode === 'temp' || mode === 'prec') ? 'visible' : 'none';
+                const windVis     = (mode === 'wind') ? 'visible' : 'none';
+                const typhoonVis  = (mode === 'typhoon') ? 'visible' : 'none';
+                const warningVis  = (mode === 'warning') ? 'visible' : 'none';
+
                 map.setLayoutProperty('layer-points', 'visibility', pointsVis);
-                map.setLayoutProperty('layer-wind', 'visibility', windVis);
-                
-                // 台風レイヤーの表示制御
-                const typhoonVis = (mode === 'typhoon') ? 'visible' : 'none';
-                map.setLayoutProperty('layer-typhoon-area', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-past-track', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-track', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-forecast-fill', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-storm-warning-fill', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-storm-warning-line', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-forecast-area-line', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-forecast-circle-line', 'visibility', typhoonVis);
-                map.setLayoutProperty('layer-typhoon-center', 'visibility', typhoonVis);
+                map.setLayoutProperty('layer-wind',   'visibility', windVis);
+
+                map.setLayoutProperty('layer-typhoon-area',                'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-past-track',          'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-track',               'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-fill',       'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-storm-warning-fill',  'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-storm-warning-line',  'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-area-line',  'visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-forecast-circle-line','visibility', typhoonVis);
+                map.setLayoutProperty('layer-typhoon-center',              'visibility', typhoonVis);
                 updateForecastTimeMarkers(mode === 'typhoon');
-                
+
+                map.setLayoutProperty('layer-warning-fill', 'visibility', warningVis);
+                map.setLayoutProperty('layer-warning-line', 'visibility', warningVis);
+
+                if (mode === 'warning') {
+                    loadWarningMode();
+                }
+
                 if (mode === 'temp' || mode === 'prec') {
                     map.setPaintProperty('layer-points', 'circle-color', mode === 'temp' ? ['get', 'tempColor'] : ['get', 'precColor']);
                     map.setPaintProperty('layer-points', 'circle-radius', getPointRadiusExpression(mode));
@@ -896,6 +1112,16 @@
             }
             if(openDrawer) toggleDrawer(true);
             updateLegend();
+        }
+
+        async function loadWarningMode() {
+            document.getElementById('status-bar').innerText = '警報データ取得中...';
+            await fetchWarningData();
+            applyWarningColors();
+            document.getElementById('status-bar').innerText = `警報情報 更新済`;
+            if (currentMode === 'warning') {
+                updateRanking();
+            }
         }
 
         function updateLegendToggle() {
@@ -941,12 +1167,21 @@
                     { color: '#FFFFFF', label: '過去の経路' },
                     { color: 'rgba(255, 255, 255, 0.4)', label: '警戒領域・予報円' }
                 ];
+            } else if (currentMode === 'warning') {
+                title.innerText = "注意報・警報";
+                items = [
+                    { color: '#1a1a1a', label: '特別警報', border: '1px solid #888' },
+                    { color: '#AA00AA', label: '危険警報' },
+                    { color: '#FF2800', label: '警報' },
+                    { color: '#FFEF00', label: '注意報' },
+                ];
             }
             
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'legend-item';
-                div.innerHTML = `<div class="legend-color" style="background:${item.color}; border: 1px solid rgba(255,255,255,0.4);"></div><span>${item.label}</span>`;
+                const borderStyle = item.border ? item.border : '1px solid rgba(255,255,255,0.4)';
+                div.innerHTML = `<div class="legend-color" style="background:${item.color}; border: ${borderStyle};"></div><span>${item.label}</span>`;
                 container.appendChild(div);
             });
             
@@ -955,6 +1190,8 @@
                 container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">※風速が強いほど矢印の長さ・太さが拡大します。</div>');
             } else if (currentMode === 'typhoon') {
                 container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">※白い実線は警戒領域、点線は個別の予報円<br>※赤い点は台風の中心位置</div>');
+            } else if (currentMode === 'warning') {
+                container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">※複数発表時は最上位の種別で表示<br>※危険警報は大雨・高潮・土砂・氾濫のみ</div>');
             }
         }
 
@@ -977,6 +1214,50 @@
                         list.appendChild(item);
                     });
                 }
+                return;
+            }
+
+            if (currentMode === 'warning') {
+                document.getElementById('rank-title').innerText = '発表中の警報・注意報';
+                const LEVEL_ORDER = ['tokubetsu', 'kiken', 'keiho', 'chui'];
+                const LEVEL_LABEL = { tokubetsu: '特別警報', kiken: '危険警報', keiho: '警報', chui: '注意報' };
+
+                // warningAreasGeojsonのfeatureにwarningMap情報を付けてリスト化
+                const warned = (warningAreasGeojson?.features ?? [])
+                    .filter(f => f.properties.regioncode && warningMap[f.properties.regioncode])
+                    .map(f => ({
+                        name: f.properties.name,
+                        regioncode: f.properties.regioncode,
+                        ...warningMap[f.properties.regioncode],
+                        geometry: f.geometry
+                    }))
+                    .sort((a, b) => (LEVEL_PRIORITY[b.level] ?? 0) - (LEVEL_PRIORITY[a.level] ?? 0));
+
+                if (warned.length === 0) {
+                    list.innerHTML = '<div style="padding:15px; color:var(--text-secondary); font-size:14px;">現在、発表中の警報・注意報はありません。</div>';
+                    return;
+                }
+
+                warned.forEach(w => {
+                    const item = document.createElement('div');
+                    item.className = 'warn-rank-item';
+                    const badgesHtml = w.kinds.map(k =>
+                        `<span class="warn-badge ${k.level}">${k.name}</span>`
+                    ).join('');
+                    item.innerHTML = `<div class="warn-rank-area">${w.name}</div><div class="warn-rank-badges">${badgesHtml}</div>`;
+                    item.onclick = () => {
+                        // ジオメトリの重心付近にフライ
+                        const coords = w.geometry?.coordinates;
+                        if (coords) {
+                            try {
+                                const center = turf.centroid({ type: 'Feature', geometry: w.geometry });
+                                map.flyTo({ center: center.geometry.coordinates, zoom: 10 });
+                            } catch(e) {}
+                        }
+                        showWarningDetail(w.name, w.kinds);
+                    };
+                    list.appendChild(item);
+                });
                 return;
             }
 
@@ -1030,11 +1311,31 @@
             document.getElementById('detail-card').classList.add('show');
         }
 
-        document.getElementById('btn-temp').onclick = () => handleNavClick('temp');
-        document.getElementById('btn-prec').onclick = () => handleNavClick('prec');
-        document.getElementById('btn-wind').onclick = () => handleNavClick('wind');
+        function showWarningDetail(areaName, kinds) {
+            document.getElementById('st-name').innerText = areaName;
+            document.getElementById('st-time').innerText = '発表中の情報';
+            const grid = document.getElementById('detail-grid');
+            const LEVEL_LABEL = { tokubetsu: '特別警報', kiken: '危険警報', keiho: '警報', chui: '注意報' };
+            const LEVEL_ORDER = ['tokubetsu', 'kiken', 'keiho', 'chui'];
+            const sorted = [...kinds].sort((a, b) =>
+                (LEVEL_PRIORITY[b.level] ?? 0) - (LEVEL_PRIORITY[a.level] ?? 0)
+            );
+            grid.style.gridTemplateColumns = '1fr';
+            grid.innerHTML = sorted.map(k => `
+                <div class="data-item" style="flex-direction:row; align-items:center; gap:8px;">
+                    <span class="warn-badge ${k.level}">${LEVEL_LABEL[k.level]}</span>
+                    <span class="data-value" style="font-size:13px; font-weight:500;">${k.name}</span>
+                </div>
+            `).join('');
+            document.getElementById('detail-card').classList.add('show');
+        }
+
+        document.getElementById('btn-temp').onclick    = () => handleNavClick('temp');
+        document.getElementById('btn-prec').onclick    = () => handleNavClick('prec');
+        document.getElementById('btn-wind').onclick    = () => handleNavClick('wind');
         document.getElementById('btn-typhoon').onclick = () => handleNavClick('typhoon');
-        document.getElementById('btn-rank').onclick = () => toggleDrawer();
+        document.getElementById('btn-warning').onclick = () => handleNavClick('warning');
+        document.getElementById('btn-rank').onclick    = () => toggleDrawer();
         document.getElementById('close-detail').onclick = () => document.getElementById('detail-card').classList.remove('show');
         document.getElementById('legend-toggle').onclick = () => {
             legendCollapsed = !legendCollapsed;
