@@ -113,6 +113,13 @@
             width: 100%; height: 100%;
         }
 
+        /* スマホ縦画面：下部ナビ分だけ地図の高さを縮める */
+        @media (max-width: 768px) {
+            #map {
+                height: calc(100% - var(--bottom-nav-height) - env(safe-area-inset-bottom, 0px));
+            }
+        }
+
         .drawer-header {
             padding: 24px 20px;
             font-size: 18px;
@@ -1304,6 +1311,8 @@
                 }
             }
             if(openDrawer && !isMobile()) toggleDrawer(true);
+            // タブ切り替え時はフローティングを閉じる
+            document.getElementById('detail-card').classList.remove('show');
             updateLegend();
         }
 
@@ -1539,6 +1548,11 @@
             legendCollapsed = !legendCollapsed;
             updateLegendToggle();
         };
+
+        // 画面サイズ・向き変更時に地図を再描画（地図の途切れ防止）
+        const resizeMap = () => { if (map) setTimeout(() => map.resize(), 100); };
+        window.addEventListener('resize', resizeMap);
+        screen.orientation?.addEventListener('change', resizeMap);
         
         init();
     </script>
