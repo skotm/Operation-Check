@@ -164,14 +164,14 @@
             bottom: 18px;
             left: calc(var(--rail-width) + 14px);
             width: 230px;
-            padding: 12px;
+            padding: 8px 10px 10px;
             transform: translateY(120%);
         }
         #detail-card.show { transform: translateY(0); }
 
-        /* ×ボタン・−ボタン：PCではそのまま、スマホでタップしやすく */
+        /* ×ボタン・−ボタン */
         #close-detail {
-            position: absolute; top: 8px; left: 8px;
+            position: absolute; top: 6px; left: 6px;
             width: 24px; height: 24px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 50%;
@@ -180,9 +180,9 @@
             font-size: 14px;
         }
 
-        #legend-card { bottom: 18px; right: 14px; min-width: 132px; padding: 12px; }
+        #legend-card { bottom: 18px; right: 14px; min-width: 132px; padding: 8px 10px; }
         #legend-toggle {
-            position: absolute; top: 8px; right: 8px;
+            position: absolute; top: 6px; right: 6px;
             width: 24px; height: 24px;
             border: 0; border-radius: 50%;
             background: rgba(255, 255, 255, 0.12);
@@ -248,6 +248,7 @@
                 max-width: calc(100vw - 20px);
                 min-width: 200px;
                 box-sizing: border-box;
+                padding: 6px 8px 8px;
             }
             /* ドロワー展開中はdetail-cardを非表示 */
             body.drawer-open #detail-card {
@@ -302,17 +303,17 @@
             #nav-rail { padding: 0 40px calc(env(safe-area-inset-bottom, 0px)); }
         }
 
-        .card-header { font-size: 14px; font-weight: 700; margin-bottom: 5px; text-align: center; }
-        .card-time { font-size: 10px; color: var(--text-secondary); margin-bottom: 8px; text-align: center; }
+        .card-header { font-size: 15px; font-weight: 700; margin: 4px 0 3px; text-align: center; }
+        .card-time { font-size: 11px; color: var(--text-secondary); margin-bottom: 7px; text-align: center; }
         
-        .legend-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 11px; color: var(--text-secondary); }
-        .legend-color { width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; border: 1px solid rgba(255,255,255,0.2); }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 12px; color: var(--text-secondary); }
+        .legend-color { width: 11px; height: 11px; border-radius: 3px; margin-right: 7px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
 
-        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .data-item { background: rgba(255, 255, 255, 0.05); padding: 8px; border-radius: 9px; display: flex; flex-direction: column; }
-        .data-label { font-size: 9px; color: var(--text-secondary); }
-        .data-value { font-size: 14px; font-weight: 600; }
-        .data-value span { font-size: 10px; font-weight: 400; margin-left: 2px; }
+        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .data-item { background: rgba(255, 255, 255, 0.05); padding: 6px 8px; border-radius: 8px; display: flex; flex-direction: column; }
+        .data-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 1px; }
+        .data-value { font-size: 16px; font-weight: 700; }
+        .data-value span { font-size: 11px; font-weight: 400; margin-left: 2px; }
 
         #status-bar {
             position: absolute; top: 20px; right: 20px;
@@ -1227,10 +1228,22 @@
         function handleNavClick(mode) {
             const drawer = document.getElementById('drawer-panel');
             const isOpen = drawer.classList.contains('show');
-            if (currentMode === mode && isOpen) {
-                toggleDrawer(false);
+
+            if (isMobile()) {
+                if (currentMode === mode) {
+                    // 同じタブ：開閉トグル
+                    toggleDrawer(!isOpen);
+                } else {
+                    // 別タブ：モード切替のみ、ドロワーは開かない
+                    setMode(mode, false);
+                }
             } else {
-                setMode(mode, true);
+                // PC：従来通り（同じタブで閉じる、別タブで開く）
+                if (currentMode === mode && isOpen) {
+                    toggleDrawer(false);
+                } else {
+                    setMode(mode, true);
+                }
             }
         }
 
