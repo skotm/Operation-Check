@@ -1183,46 +1183,74 @@
         //  雨雲レーダー関連
         // ============================================================
 
-        function radarTileUrl(path) {
-            return `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
+        // 気象庁 高解像度降水ナウキャスト タイルURL生成
+        // basetime: API取得時刻文字列, validtime: 対象時刻文字列
+        function radarTileUrl(basetime, validtime) {
+            return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/none/${validtime}/surf/hrpns/{z}/{x}/{y}.png`;
+        }
+
+        // validtime文字列 (yyyyMMddHHmmss) → Date オブジェクト
+        function nowcStrToDate(s) {
+            // "20250601143000" → 2025-06-01T14:30:00+09:00 (JST)
+            return new Date(
+                `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}T${s.slice(8,10)}:${s.slice(10,12)}:${s.slice(12,14)}+09:00`
+            );
         }
 
         async function loadRadarFrames() {
-            if (radarLoaded) return; // 取得済みなら再取得しない
+            // タブを再表示するたびに最新データを取得（5分ごとに更新されるため）
             try {
                 document.getElementById('status-bar').innerText = 'レーダーデータ取得中...';
-                const res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { cache: 'no-store' });
-                if (!res.ok) throw new Error('RainViewer API error');
-                const json = await res.json();
+                const res = await fetch(
+                    'https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',
+                    { cache: 'no-store' }
+                );
+                if (!res.ok) throw new Error('JMA nowc API error');
+                const times = await res.json(); // [{basetime, validtime}, ...]
 
-                const past    = (json.radar?.past     ?? []).map(f => ({ ...f, isNowcast: false }));
-                const nowcast = (json.radar?.nowcast  ?? []).map(f => ({ ...f, isNowcast: true  }));
-                radarFrames = [...past, ...nowcast];
+                if (!Array.isArray(times) || times.length === 0) throw new Error('No frames');
 
-                if (radarFrames.length === 0) throw new Error('No radar frames');
+                // validtimeでソート（古い順）
+                radarFrames = times
+                    .slice()
+                    .sort((a, b) => a.validtime.localeCompare(b.validtime))
+                    .map(t => {
+                        const vDate = nowcStrToDate(t.validtime);
+                        const bDate = nowcStrToDate(t.basetime);
+                        // validtime > basetime ならナウキャスト（予測）
+                        const isNowcast = vDate > bDate;
+                        return { basetime: t.basetime, validtime: t.validtime, isNowcast };
+                    });
+
                 radarLoaded = true;
 
-                // スライダーのmax設定
+                // スライダーのmax設定・最新フレームへ
                 const slider = document.getElementById('radar-slider');
                 slider.max = radarFrames.length - 1;
                 slider.value = radarFrames.length - 1;
                 radarIndex = radarFrames.length - 1;
 
                 // MapLibreにソース・レイヤーを追加（初回のみ）
+                const firstFrame = radarFrames[radarIndex];
                 if (!map.getSource('radar')) {
                     map.addSource('radar', {
                         type: 'raster',
-                        tiles: [radarTileUrl(radarFrames[radarIndex].path)],
+                        tiles: [radarTileUrl(firstFrame.basetime, firstFrame.validtime)],
                         tileSize: 256,
-                        attribution: '© RainViewer'
+                        minzoom: 1,
+                        maxzoom: 16,
+                        attribution: "<a href='https://www.jma.go.jp/bosai/nowc/' target='_blank'>気象庁 高解像度降水ナウキャスト</a>"
                     });
                     map.addLayer({
                         id: 'layer-radar',
                         type: 'raster',
                         source: 'radar',
                         layout: { visibility: 'none' },
-                        paint: { 'raster-opacity': 0.75 }
+                        paint: { 'raster-opacity': 0.8 }
                     });
+                } else {
+                    // 再取得時はタイルURLだけ更新
+                    map.getSource('radar').setTiles([radarTileUrl(firstFrame.basetime, firstFrame.validtime)]);
                 }
 
                 updateRadarFrame();
@@ -1238,11 +1266,11 @@
             const frame = radarFrames[radarIndex];
 
             // タイルURLを更新
-            map.getSource('radar').setTiles([radarTileUrl(frame.path)]);
+            map.getSource('radar').setTiles([radarTileUrl(frame.basetime, frame.validtime)]);
 
             // スライダーとラベルを更新
             document.getElementById('radar-slider').value = radarIndex;
-            const d = new Date(frame.time * 1000);
+            const d = nowcStrToDate(frame.validtime);
             const pad = n => String(n).padStart(2, '0');
             const label = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
             const nowcastTag = frame.isNowcast ? '<span class="radar-nowcast-tag">予測</span>' : '';
@@ -1800,7 +1828,7 @@
             } else if (currentMode === 'warning') {
                 container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">※複数発表時は最上位の種別で表示<br>※危険警報は大雨・高潮・土砂・氾濫のみ</div>');
             } else if (currentMode === 'prec' && precSubMode === 'radar') {
-                container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">Data: RainViewer<br>※青タグは予測（ナウキャスト）</div>');
+                container.insertAdjacentHTML('beforeend', '<div style="font-size:9px; color:var(--text-secondary); margin-top:6px; border-top:1px solid var(--border-color); padding-top:6px;">気象庁 高解像度降水ナウキャスト<br>※青タグは予測（ナウキャスト）</div>');
             }
         }
 
