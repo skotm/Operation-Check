@@ -169,23 +169,25 @@
         }
         #detail-card.show { transform: translateY(0); }
 
+        /* ×ボタン・−ボタン：PCではそのまま、スマホでタップしやすく */
         #close-detail {
             position: absolute; top: 8px; left: 8px;
-            width: 20px; height: 20px;
+            width: 24px; height: 24px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; color: var(--text-secondary);
+            font-size: 14px;
         }
 
         #legend-card { bottom: 18px; right: 14px; min-width: 132px; padding: 12px; }
         #legend-toggle {
             position: absolute; top: 8px; right: 8px;
-            width: 20px; height: 20px;
+            width: 24px; height: 24px;
             border: 0; border-radius: 50%;
             background: rgba(255, 255, 255, 0.12);
             color: var(--text-primary);
-            font-size: 16px; line-height: 18px;
+            font-size: 16px; line-height: 24px;
             cursor: pointer;
         }
         #legend-card.collapsed #legend-content { display: none; }
@@ -237,22 +239,47 @@
             }
             #drawer-panel.show { transform: translateY(0); }
 
-            /* detail-card をナビ上に配置 */
+            /* ---- detail-card ----
+               スマホではコンパクトに・左下固定・横幅は自然なサイズ */
             #detail-card {
                 left: 10px;
                 bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px);
-                width: calc(100vw - 20px);
+                width: auto;
+                max-width: calc(100vw - 20px);
+                min-width: 200px;
                 box-sizing: border-box;
             }
+            /* ドロワー展開中はdetail-cardを非表示 */
             body.drawer-open #detail-card {
                 left: 10px;
-                bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 55vh + 10px);
+                opacity: 0;
+                pointer-events: none;
+                transform: translateY(120%);
             }
 
-            /* legend-card をナビ上に */
+            /* ---- legend-card ----
+               右下固定。detail-cardと重ならないよう右側に置く */
             #legend-card {
                 bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 12px);
                 right: 10px;
+                left: auto;
+            }
+            /* ドロワー展開中はlegend-cardも非表示 */
+            body.drawer-open #legend-card {
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            /* ×・−ボタンをタップしやすく */
+            #close-detail {
+                width: 32px; height: 32px;
+                font-size: 16px;
+                top: 6px; left: 6px;
+            }
+            #legend-toggle {
+                width: 32px; height: 32px;
+                font-size: 18px; line-height: 32px;
+                top: 6px; right: 6px;
             }
 
             /* status-bar */
@@ -269,9 +296,6 @@
 
         @media (max-width: 768px) and (orientation: landscape) {
             #drawer-panel { height: 80vh; }
-            body.drawer-open #detail-card {
-                bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 80vh + 10px);
-            }
             body.drawer-open .maplibregl-ctrl-bottom-right {
                 margin-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 80vh + 10px);
             }
@@ -706,6 +730,8 @@
                     forecastTimeMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat(center).addTo(map));
                 });
         }
+        function isMobile() { return window.innerWidth <= 768; }
+
         // ---- 警報データ取得（新API r8 のみ）----
         async function fetchWarningData() {
             warningMap = {};
@@ -1264,7 +1290,7 @@
                     map.setFilter('layer-wind', ['!=', ['get', 'wind'], null]);
                 }
             }
-            if(openDrawer) toggleDrawer(true);
+            if(openDrawer && !isMobile()) toggleDrawer(true);
             updateLegend();
         }
 
@@ -1437,8 +1463,12 @@
         }
 
         function showDetail(props) {
+            // スマホ時はドロワーを閉じてからカードを表示
+            if (isMobile()) toggleDrawer(false);
+
             document.getElementById('st-name').innerText = props.name;
             const grid = document.getElementById('detail-grid');
+            grid.style.gridTemplateColumns = '';
 
             if (props.type === 'center' || props.type === 'forecastCircle') {
                 document.getElementById('st-time').innerText = props.forecastTime ? `${props.forecastTime} 予測` : `現在位置と勢力`;
@@ -1453,7 +1483,6 @@
             } else {
                 document.getElementById('st-time').innerText = `${currentObsTime} 観測`;
                 const formatVal = (val) => (val == null || val === 'undefined' || val === 'null' || val === '') ? '-' : val;
-                
                 grid.innerHTML = `
                     <div class="data-item"><span class="data-label">気温</span><span class="data-value" id="val-temp">${formatVal(props.temp)}<span>℃</span></span></div>
                     <div class="data-item"><span class="data-label">降水量</span><span class="data-value" id="val-prec">${formatVal(props.prec)}<span>mm</span></span></div>
@@ -1466,11 +1495,13 @@
         }
 
         function showWarningDetail(areaName, kinds) {
+            // スマホ時はドロワーを閉じてからカードを表示
+            if (isMobile()) toggleDrawer(false);
+
             document.getElementById('st-name').innerText = areaName;
             document.getElementById('st-time').innerText = '発表中の情報';
             const grid = document.getElementById('detail-grid');
             const LEVEL_LABEL = { tokubetsu: '特別警報', kiken: '危険警報', keiho: '警報', chui: '注意報' };
-            const LEVEL_ORDER = ['tokubetsu', 'kiken', 'keiho', 'chui'];
             const sorted = [...kinds].sort((a, b) =>
                 (LEVEL_PRIORITY[b.level] ?? 0) - (LEVEL_PRIORITY[a.level] ?? 0)
             );
