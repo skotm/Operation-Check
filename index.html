@@ -634,10 +634,10 @@
         // ズーム範囲ごとのsource設定（奇数ズームで偶数タイルを引き伸ばすための4分割）
         // source.maxzoom を偶数値にすることで、MapLibreが奇数ズームを自動拡大補完する
         const RADAR_ZOOM_CONFIGS = [
-            { key: 'z4',  srcMaxzoom: 4,  layerMin: 4,  layerMax: 6  }, // zoom 4-5: z=4タイルを使用(zoom5は引き伸ばし)
-            { key: 'z6',  srcMaxzoom: 6,  layerMin: 6,  layerMax: 8  }, // zoom 6-7: z=6タイルを使用(zoom7は引き伸ばし)
-            { key: 'z8',  srcMaxzoom: 8,  layerMin: 8,  layerMax: 10 }, // zoom 8-9: z=8タイルを使用(zoom9は引き伸ばし)
-            { key: 'z10', srcMaxzoom: 10, layerMin: 10, layerMax: 22 }, // zoom10+: z=10タイルを使用(zoom11+は引き伸ばし)
+            { key: 'z4',  srcMaxzoom: 4,  layerMin: 1,  layerMax: 5  }, // zoom ~4:  z=4タイルを使用
+            { key: 'z6',  srcMaxzoom: 6,  layerMin: 5,  layerMax: 7  }, // zoom 5-6: z=6タイルを使用(zoom5は引き伸ばし)
+            { key: 'z8',  srcMaxzoom: 8,  layerMin: 7,  layerMax: 9  }, // zoom 7-8: z=8タイルを使用(zoom7は引き伸ばし)
+            { key: 'z10', srcMaxzoom: 10, layerMin: 9,  layerMax: 22 }, // zoom 9+:  z=10タイルを使用(zoom9は引き伸ばし)
         ];
 
         let precSubMode = 'radar'; // 'radar' | 'amedas'
