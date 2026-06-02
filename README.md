@@ -3,7 +3,7 @@
 # 気象情報可視化ツール      wis viewer
 **ブラウザ完結型の気象情報ダッシュボード**
 
-https://github.com/skotm/wis-viewer
+https://skotm.github.io/wis-viewer
 
 </div>
 
