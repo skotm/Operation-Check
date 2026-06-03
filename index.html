@@ -159,7 +159,8 @@
             z-index: 1500;
             transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
                         opacity  0.3s ease,
-                        left     0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+                        left     0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
+                        bottom   0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
         #detail-card {
@@ -311,6 +312,14 @@
             body.drawer-open .maplibregl-ctrl-bottom-right {
                 margin-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 55vh + 10px);
             }
+
+        }
+
+        /* 縦画面：雨雲レーダースライダー表示中は凡例をスライダーの上にずらして被りを回避 */
+        @media (max-width: 768px) and (orientation: portrait) {
+            body:has(#radar-slider-bar.visible) #legend-card {
+                bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 100px);
+            }
         }
 
         @media (max-width: 768px) and (orientation: landscape) {
@@ -319,6 +328,27 @@
                 margin-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 80vh + 10px);
             }
             #nav-rail { padding: 0 40px calc(env(safe-area-inset-bottom, 0px)); }
+
+            /* 横画面：スライダーの右端を凡例の左端より内側に収めて被りを回避 */
+            /* 凡例の実効幅 ≈ right:10px + 要素幅~154px = 164px → 余白込みで 180px を確保 */
+            body:has(#radar-slider-bar.visible) #radar-slider-bar {
+                left: 8px;
+                right: 180px;
+                width: auto;
+            }
+        }
+
+        /* PC・タブレット: 雨雲レーダースライダーを凡例と被らないよう左寄せに変更          */
+        /* モバイル横画面と同じ原理: ナビレール直後を起点、right:180px で凡例手前まで       */
+        /* max-width:560px 超の画面では 560px 幅で左寄せ、狭い画面は left/right 間で縮む   */
+        @media (min-width: 769px) {
+            body:has(#radar-slider-bar.visible) #radar-slider-bar {
+                left: calc(var(--rail-width) + 8px);
+                right: 180px;
+                width: auto;
+                max-width: 560px;
+                transform: none;
+            }
         }
 
         .card-header { font-size: 15px; font-weight: 700; margin: 4px 0 3px; text-align: center; }
