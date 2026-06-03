@@ -1032,6 +1032,47 @@
             warningMap[regioncode] = { level: topLevel.level, kinds: deduped };
         }
 
+        // ---- 氾濫系警報コード → {name, level} に変換 ----
+        // 気象庁 flood_xml.json の item.code は先頭の十の位でレベルが決まる
+        // 1x = 解除 / 2x = 氾濫注意報 / 3x = 氾濫警報 / 4x = 氾濫危険警報 / 5x = 氾濫特別警報
+        function getFloodWarningKind(codeStr) {
+            const n = parseInt(codeStr, 10);
+            if (n >= 20 && n < 30) return { name: '氾濫注意報',   level: 'chui' };
+            if (n >= 30 && n < 40) return { name: '氾濫警報',     level: 'keiho' };
+            if (n >= 40 && n < 50) return { name: '氾濫危険警報', level: 'kiken' };
+            if (n >= 50)            return { name: '氾濫特別警報', level: 'tokubetsu' };
+            return null; // 1x = 解除, その他 = 不明 → スキップ
+        }
+
+        // ---- 氾濫系警報データ取得（flood/data/r8/flood_xml.json）----
+        async function fetchFloodWarningData() {
+            try {
+                const res = await fetch('https://www.jma.go.jp/bosai/flood/data/r8/flood_xml.json', { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!Array.isArray(data)) return;
+
+                let count = 0;
+                data.forEach(entry => {
+                    const kind = getFloodWarningKind(String(entry?.item?.code ?? '').trim());
+                    if (!kind) return; // 解除または不明コードはスキップ
+
+                    // class20Codes は7桁の市区町村コードで warningMap の regioncode と一致する
+                    (entry?.class20Codes ?? []).forEach(rc => {
+                        const regioncode = String(rc).trim();
+                        if (regioncode) {
+                            mergeWarning(regioncode, [kind]);
+                            count++;
+                        }
+                    });
+                });
+
+                console.log(`[氾濫警報] flood_xml.json 処理: ${count} 件のエリアにマージ`);
+            } catch (e) {
+                console.warn('[氾濫警報] flood_xml.json 取得失敗:', e);
+            }
+        }
+
         function applyWarningColors() {
             if (!warningAreasGeojson || !map.getSource('warning-areas')) return;
             const updated = {
@@ -1779,7 +1820,13 @@
 
         async function loadWarningMode() {
             document.getElementById('status-bar').innerText = '警報データ取得中...';
-            await fetchWarningData();
+            // 通常警報 (warning/data/r8/) と 氾濫警報 (flood/data/r8/flood_xml.json) を並列取得
+            // fetchWarningData() 内の warningMap={} はその関数先頭で同期的に実行されるため
+            // fetchFloodWarningData() の結果と安全にマージできる
+            await Promise.all([
+                fetchWarningData(),
+                fetchFloodWarningData()
+            ]);
             applyWarningColors();
             document.getElementById('status-bar').innerText = `警報情報 更新済`;
             if (currentMode === 'warning') {
