@@ -1292,6 +1292,12 @@
         function nowcStrToMs(s) {
             return Date.UTC(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8),+s.slice(8,10),+s.slice(10,12),+s.slice(12,14));
         }
+        // ms タイムスタンプ → JMA時刻文字列 (yyyyMMddHHmm00)
+        function msToNowcStr(ms) {
+            const d = new Date(ms);
+            const p = n => String(n).padStart(2, '0');
+            return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
+        }
 
         async function loadRadarFrames() {
             // タブを再表示するたびに最新データを取得（5分ごとに更新されるため）
@@ -1318,6 +1324,31 @@
                     }));
 
                 radarLoaded = true;
+
+                // ---- 予測フレームの補完 ----------------------------------------
+                // targetTimes_N1.json が basetime==validtime な観測フレームのみ返す場合、
+                // isNowcast が1件もtrueにならず予測帯が存在しない。
+                // その場合、最新観測時刻を5分切り捨てしたものをbaseとして
+                // T+5〜T+60分（5分間隔12フレーム）の予測フレームを合成する。
+                // 気象庁はこのURLパスで hrpns 予測タイルを公開しているため
+                // 合成フレームでもタイルが取得できる。
+                const FIVE_MIN = 5 * 60 * 1000;
+                if (!radarFrames.some(f => f.isNowcast) && radarFrames.length > 0) {
+                    const latestMs = nowcStrToMs(radarFrames[radarFrames.length - 1].validtime);
+                    const baseMs   = Math.floor(latestMs / FIVE_MIN) * FIVE_MIN;
+                    const basetime = msToNowcStr(baseMs);
+                    for (let i = 1; i <= 12; i++) {
+                        radarFrames.push({
+                            basetime,
+                            validtime: msToNowcStr(baseMs + i * FIVE_MIN),
+                            member: 'none',
+                            isNowcast: true
+                        });
+                    }
+                    console.debug(`[Radar] N1.jsonに予測フレームなし → 合成12件追加 base:${basetime}`);
+                }
+                console.debug(`[Radar] 計${radarFrames.length}フレーム / 予測${radarFrames.filter(f=>f.isNowcast).length}件`);
+                // -------------------------------------------------------------
 
                 // スライダー max 設定・初期位置は最新の「観測」フレーム（予測ではなく実レーダーの最新）
                 const slider = document.getElementById('radar-slider');
