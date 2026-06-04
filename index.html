@@ -329,24 +329,29 @@
             }
             #nav-rail { padding: 0 40px calc(env(safe-area-inset-bottom, 0px)); }
 
-            /* 横画面：スライダーの右端を凡例の左端より内側に収めて被りを回避 */
-            /* 凡例の実効幅 ≈ right:10px + 要素幅~154px = 164px → 余白込みで 180px を確保 */
+            /* 横画面：下部中央配置、凡例と重なる場合のみ左にシフト                    */
+            /* 凡例: right:10px + 実効幅154px + 余白8px = 172px                       */
             body:has(#radar-slider-bar.visible) #radar-slider-bar {
                 left: 8px;
-                right: 180px;
-                width: auto;
+                right: 172px;
+                width: min(560px, calc(100vw - 180px));
+                margin-left: auto;
+                margin-right: auto;
+                transform: none;
             }
         }
 
-        /* PC・タブレット: 雨雲レーダースライダーを凡例と被らないよう左寄せに変更          */
-        /* モバイル横画面と同じ原理: ナビレール直後を起点、right:180px で凡例手前まで       */
-        /* max-width:560px 超の画面では 560px 幅で左寄せ、狭い画面は left/right 間で縮む   */
+        /* PC・タブレット: 下部中央配置、凡例と重なる場合のみ左にシフト                    */
+        /* left + right で利用可能域を確定 → margin:auto で中央揃え                       */
+        /* 幅が利用可能域より小さければ中央、大きければ left/right 間いっぱいに縮む         */
+        /* 凡例: right:14px + 実効幅154px + 余白8px = 176px                              */
         @media (min-width: 769px) {
             body:has(#radar-slider-bar.visible) #radar-slider-bar {
                 left: calc(var(--rail-width) + 8px);
-                right: 180px;
-                width: auto;
-                max-width: 560px;
+                right: 176px;
+                width: min(560px, calc(100vw - var(--rail-width) - 184px));
+                margin-left: auto;
+                margin-right: auto;
                 transform: none;
             }
         }
@@ -1266,8 +1271,8 @@
 
         // 気象庁 高解像度降水ナウキャスト タイルURL生成
         // basetime: API取得時刻文字列, validtime: 対象時刻文字列
-        function radarTileUrl(basetime, validtime) {
-            return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/none/${validtime}/surf/hrpns/{z}/{x}/{y}.png`;
+        function radarTileUrl(basetime, member, validtime) {
+            return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/${member}/${validtime}/surf/hrpns/{z}/{x}/{y}.png`;
         }
 
         // validtime文字列 (yyyyMMddHHmmss) はUTC格納
@@ -1305,19 +1310,21 @@
                 radarFrames = times
                     .slice()
                     .sort((a, b) => a.validtime.localeCompare(b.validtime))
-                    .map(t => {
-                        // validtime > basetime ならナウキャスト（予測）
-                        const isNowcast = nowcStrToMs(t.validtime) > nowcStrToMs(t.basetime);
-                        return { basetime: t.basetime, validtime: t.validtime, isNowcast };
-                    });
+                    .map(t => ({
+                        basetime: t.basetime,
+                        validtime: t.validtime,
+                        member: t.member ?? 'none',   // タイルURL の member セグメントに使用
+                        isNowcast: nowcStrToMs(t.validtime) > nowcStrToMs(t.basetime)
+                    }));
 
                 radarLoaded = true;
 
-                // スライダーのmax設定・最新フレームへ
+                // スライダー max 設定・初期位置は最新の「観測」フレーム（予測ではなく実レーダーの最新）
                 const slider = document.getElementById('radar-slider');
                 slider.max = radarFrames.length - 1;
-                slider.value = radarFrames.length - 1;
-                radarIndex = radarFrames.length - 1;
+                const initIdx = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, radarFrames.length - 1);
+                slider.value = initIdx;
+                radarIndex = initIdx;
 
                 // MapLibreにソース・レイヤーを追加（初回のみ）
                 const firstFrame = radarFrames[radarIndex];
@@ -1331,7 +1338,7 @@
                     if (!map.getSource(srcId)) {
                         map.addSource(srcId, {
                             type: 'raster',
-                            tiles: [radarTileUrl(firstFrame.basetime, firstFrame.validtime)],
+                            tiles: [radarTileUrl(firstFrame.basetime, firstFrame.member, firstFrame.validtime)],
                             tileSize: 256,
                             maxzoom: cfg.srcMaxzoom,
                             attribution: radarAttr
@@ -1362,7 +1369,7 @@
 
             // 全ソースのタイルURLを更新し、全レイヤーを表示（zoom範囲で自動的に1つだけ表示）
             for (const cfg of RADAR_ZOOM_CONFIGS) {
-                map.getSource('radar-' + cfg.key).setTiles([radarTileUrl(frame.basetime, frame.validtime)]);
+                map.getSource('radar-' + cfg.key).setTiles([radarTileUrl(frame.basetime, frame.member, frame.validtime)]);
                 map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'visible');
             }
 
@@ -1372,12 +1379,30 @@
             const nowcastTag = frame.isNowcast ? '<span class="radar-nowcast-tag">予測</span>' : '';
             document.getElementById('radar-time-label').innerHTML = label + nowcastTag;
 
-            // スライダーのグラデーション
-            const pct = radarFrames.length > 1
-                ? (radarIndex / (radarFrames.length - 1)) * 100
-                : 100;
+            // スライダーのグラデーション（観測帯:青 / 予測帯:緑 / 未再生:薄グレー）
+            const total = radarFrames.length - 1;
+            const pct = total > 0 ? (radarIndex / total) * 100 : 100;
+            const lastObsIdx = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, -1);
+            const hasNowcast = radarFrames.some(f => f.isNowcast);
+            const obsPct = hasNowcast && lastObsIdx >= 0 ? (lastObsIdx / total) * 100 : 100;
             const slider = document.getElementById('radar-slider');
-            slider.style.background = 'linear-gradient(to right, #0A84FF ' + pct + '%, rgba(255,255,255,0.2) ' + pct + '%)';
+            if (hasNowcast) {
+                if (pct <= obsPct) {
+                    // スライダーが観測帯内: 青(再生済) / グレー(観測未再生) / 薄緑(予測帯)
+                    slider.style.background = `linear-gradient(to right,
+                        #0A84FF 0%, #0A84FF ${pct}%,
+                        rgba(255,255,255,0.15) ${pct}%, rgba(255,255,255,0.15) ${obsPct}%,
+                        rgba(48,209,88,0.25) ${obsPct}%, rgba(48,209,88,0.25) 100%)`;
+                } else {
+                    // スライダーが予測帯内: 青(観測帯) / 緑(予測再生済) / グレー(予測未再生)
+                    slider.style.background = `linear-gradient(to right,
+                        #0A84FF 0%, #0A84FF ${obsPct}%,
+                        rgba(48,209,88,0.9) ${obsPct}%, rgba(48,209,88,0.9) ${pct}%,
+                        rgba(255,255,255,0.15) ${pct}%, rgba(255,255,255,0.15) 100%)`;
+                }
+            } else {
+                slider.style.background = `linear-gradient(to right, #0A84FF ${pct}%, rgba(255,255,255,0.2) ${pct}%)`;
+            }
         }
 
         function radarSeek(index) {
@@ -1390,7 +1415,9 @@
         }
 
         function radarGoLatest() {
-            radarSeek(radarFrames.length - 1);
+            // 「現在」= 最新の観測フレーム（予測ではなく実レーダー観測の最新時刻）
+            const latestObsIdx = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, 0);
+            radarSeek(latestObsIdx);
         }
 
         function radarTogglePlay() {
