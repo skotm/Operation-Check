@@ -669,10 +669,10 @@
         // ズーム範囲ごとのsource設定（奇数ズームで偶数タイルを引き伸ばすための4分割）
         // source.maxzoom を偶数値にすることで、MapLibreが奇数ズームを自動拡大補完する
         const RADAR_ZOOM_CONFIGS = [
-            { key: 'z4',  srcMaxzoom: 4,  layerMin: 1,  layerMax: 5  }, // zoom ~4:  z=4タイルを使用
-            { key: 'z6',  srcMaxzoom: 6,  layerMin: 5,  layerMax: 7  }, // zoom 5-6: z=6タイルを使用(zoom5は引き伸ばし)
-            { key: 'z8',  srcMaxzoom: 8,  layerMin: 7,  layerMax: 9  }, // zoom 7-8: z=8タイルを使用(zoom7は引き伸ばし)
-            { key: 'z10', srcMaxzoom: 10, layerMin: 9,  layerMax: 22 }, // zoom 9+:  z=10タイルを使用(zoom9は引き伸ばし)
+            { key: 'z4',  srcMaxzoom: 4,  layerMin: 0,  layerMax: 4  }, // zoom 0-3:  z=4タイル使用
+            { key: 'z6',  srcMaxzoom: 6,  layerMin: 4,  layerMax: 6  }, // zoom 4-5:  z=6タイル使用(zoom5は引き伸ばし)
+            { key: 'z8',  srcMaxzoom: 8,  layerMin: 6,  layerMax: 8  }, // zoom 6-7:  z=8タイル使用(zoom7は引き伸ばし)
+            { key: 'z10', srcMaxzoom: 10, layerMin: 8,  layerMax: 22 }, // zoom 8+:   z=10タイル使用(zoom9は引き伸ばし)
         ];
 
         let precSubMode = 'radar'; // 'radar' | 'amedas'
@@ -1381,10 +1381,33 @@
                             minzoom: cfg.layerMin,
                             maxzoom: cfg.layerMax,
                             layout: { visibility: 'none' },
-                            paint: { 'raster-opacity': 0.5 }
+                            paint: { 'raster-opacity': 0.75 }
                         }, 'layer-points');
                     }
                 }
+
+                // 境界線オーバーレイ: レーダータイルの前面に国境・都道府県境を描画
+                // addLayer に beforeId を指定しないことでスタック最上位に配置される
+                if (!map.getLayer('pref-line-overlay')) {
+                    map.addLayer({
+                        id: 'world-line-overlay',
+                        type: 'line',
+                        source: 'world',
+                        layout: { visibility: 'none' },
+                        paint: { 'line-color': '#666666', 'line-width': 1.2, 'line-opacity': 1 }
+                    });
+                    map.addLayer({
+                        id: 'pref-line-overlay',
+                        type: 'line',
+                        source: 'prefectures',
+                        layout: { visibility: 'none' },
+                        paint: { 'line-color': '#bbbbbb', 'line-width': 2.0, 'line-opacity': 1 }
+                    });
+                }
+                // レーダーサブモードのみ表示（AMeDAS観測値モードでは非表示）
+                const overlayVis = precSubMode === 'radar' ? 'visible' : 'none';
+                map.setLayoutProperty('world-line-overlay', 'visibility', overlayVis);
+                map.setLayoutProperty('pref-line-overlay',  'visibility', overlayVis);
 
                 updateRadarFrame();
                 document.getElementById('status-bar').innerText = 'LIVE: レーダー表示中';
@@ -1497,6 +1520,12 @@
                 // スライダー非表示・再生停止
                 sliderBar.classList.remove('visible');
                 stopRadarPlay();
+
+                // 境界線オーバーレイを非表示（観測値モードでは不要）
+                if (map.getLayer('pref-line-overlay')) {
+                    map.setLayoutProperty('world-line-overlay', 'visibility', 'none');
+                    map.setLayoutProperty('pref-line-overlay',  'visibility', 'none');
+                }
 
                 // レーダーを現在時刻（最新フレーム）に固定して表示
                 if (radarFrames.length > 0) {
@@ -1852,6 +1881,11 @@
                     if (map.getLayer('layer-radar-' + cfg.key)) {
                         map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'none');
                     }
+                }
+                // 境界線オーバーレイも非表示
+                if (map.getLayer('pref-line-overlay')) {
+                    map.setLayoutProperty('world-line-overlay', 'visibility', 'none');
+                    map.setLayoutProperty('pref-line-overlay',  'visibility', 'none');
                 }
             }
             
