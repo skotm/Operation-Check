@@ -666,22 +666,18 @@
         let currentObsTime = '--:--';
 
         // 雨雲レーダー関連
-        // ズーム範囲ごとのsource設定（奇数ズームで偶数タイルを引き伸ばすための4分割）
-        // source.maxzoom を偶数値にすることで、MapLibreが奇数ズームを自動拡大補完する
-        const RADAR_ZOOM_CONFIGS = [
-            { key: 'z4',  srcMaxzoom: 4,  layerMin: 1,  layerMax: 4  }, // zoom 1-3:  z=4タイル使用（z=0はJMA未提供）
-            { key: 'z6',  srcMaxzoom: 6,  layerMin: 4,  layerMax: 6  }, // zoom 4-5:  z=6タイル使用(zoom5は引き伸ばし)
-            { key: 'z8',  srcMaxzoom: 8,  layerMin: 6,  layerMax: 8  }, // zoom 6-7:  z=8タイル使用(zoom7は引き伸ばし)
-            { key: 'z10', srcMaxzoom: 10, layerMin: 8,  layerMax: 22 }, // zoom 8+:   z=10タイル使用(zoom9は引き伸ばし)
-        ];
+        // 単一ソース・単一レイヤー構成
+        // ズーム分割は廃止：MapLibreが {z} を自動補完するため分割不要
+        // setTiles() はフレーム切り替え時のみ呼び、ズーム中は一切呼ばない
+        const RADAR_SRC = 'radar';
+        const RADAR_LYR = 'layer-radar';
 
         let precSubMode = 'radar'; // 'radar' | 'amedas'
         let radarFrames = [];      // [{basetime, validtime, member, isNowcast}]
         let radarIndex = 0;
         let radarTimer = null;
         let radarLoaded = false;
-        let radarCurrentTileUrl  = null;  // 現在フレームのタイルURL（ズーム遷移時の再適用に使用）
-        let radarLastActiveKey   = null;  // 最後に setTiles() を呼んだ zoom-config キー
+        let radarCurrentTileUrl  = null;  // 現在フレームのタイルURL
         let radarFetchInProgress = false; // loadRadarFrames() の多重実行防止フラグ
 
         // 警報関連
@@ -1363,32 +1359,28 @@
                 radarIndex = initIdx;
 
                 // MapLibreにソース・レイヤーを追加（初回のみ）
+                // 単一ソース構成: MapLibreが {z} を自動補完するため分割不要
+                // source.maxzoom: 10 = JMAがhrpnsを提供する上限（それ以上はオーバーズーム）
                 const firstFrame = radarFrames[radarIndex];
                 const radarAttr = "<a href='https://www.jma.go.jp/bosai/nowc/' target='_blank'>気象庁 高解像度降水ナウキャスト</a>";
-                // 奇数ズームでは偶数ズームのタイルを引き伸ばして表示する（気象庁本家と同じ負荷軽減策）
-                // source.maxzoom を偶数ズームに設定することで、MapLibre が自動的に親タイルを拡大補完する
-                // ズーム範囲ごとに source を分けることで、各奇数ズームで正しい偶数タイルが使われる
-                for (const cfg of RADAR_ZOOM_CONFIGS) {
-                    const srcId = 'radar-' + cfg.key;
-                    const lyrId = 'layer-radar-' + cfg.key;
-                    if (!map.getSource(srcId)) {
-                        map.addSource(srcId, {
-                            type: 'raster',
-                            tiles: [radarTileUrl(firstFrame.basetime, firstFrame.member, firstFrame.validtime)],
-                            tileSize: 256,
-                            maxzoom: cfg.srcMaxzoom,
-                            attribution: radarAttr
-                        });
-                        map.addLayer({
-                            id: lyrId,
-                            type: 'raster',
-                            source: srcId,
-                            minzoom: cfg.layerMin,
-                            maxzoom: cfg.layerMax,
-                            layout: { visibility: 'none' },
-                            paint: { 'raster-opacity': 0.75 }
-                        }, 'layer-points');
-                    }
+                if (!map.getSource(RADAR_SRC)) {
+                    map.addSource(RADAR_SRC, {
+                        type: 'raster',
+                        tiles: [radarTileUrl(firstFrame.basetime, firstFrame.member, firstFrame.validtime)],
+                        tileSize: 256,
+                        minzoom: 1,
+                        maxzoom: 10,
+                        attribution: radarAttr
+                    });
+                    map.addLayer({
+                        id: RADAR_LYR,
+                        type: 'raster',
+                        source: RADAR_SRC,
+                        minzoom: 1,
+                        maxzoom: 22,
+                        layout: { visibility: 'none' },
+                        paint: { 'raster-opacity': 0.75 }
+                    }, 'layer-points');
                 }
 
                 // 境界線オーバーレイ: レーダータイルの前面に国境・都道府県境を描画
@@ -1425,17 +1417,14 @@
         }
 
         function updateRadarFrame() {
-            if (!radarFrames.length || !map.getSource('radar-z4')) return;
+            if (!radarFrames.length || !map.getSource(RADAR_SRC)) return;
             const frame = radarFrames[radarIndex];
 
-            // 全ソースのタイルURLを更新し、全レイヤーを表示
-            // （ズーム遷移時に新しいレイヤーが即座にタイルを持てるよう全ソースを同期する）
+            // 単一ソースのタイルURLを更新してレイヤーを表示
             const tileUrl = radarTileUrl(frame.basetime, frame.member, frame.validtime);
-            for (const cfg of RADAR_ZOOM_CONFIGS) {
-                if (!map.getSource('radar-' + cfg.key)) continue;
-                map.getSource('radar-' + cfg.key).setTiles([tileUrl]);
-                map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'visible');
-            }
+            if (!map.getSource(RADAR_SRC)) return;
+            map.getSource(RADAR_SRC).setTiles([tileUrl]);
+            map.setLayoutProperty(RADAR_LYR, 'visibility', 'visible');
             radarCurrentTileUrl = tileUrl;
 
             // スライダーとラベルを更新
@@ -1888,10 +1877,8 @@
                 // precタブを離れたらレーダーを非表示・再生停止
                 document.getElementById('radar-slider-bar').classList.remove('visible');
                 stopRadarPlay();
-                for (const cfg of RADAR_ZOOM_CONFIGS) {
-                    if (map.getLayer('layer-radar-' + cfg.key)) {
-                        map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'none');
-                    }
+                if (map.getLayer(RADAR_LYR)) {
+                    map.setLayoutProperty(RADAR_LYR, 'visibility', 'none');
                 }
                 // 境界線オーバーレイも非表示
                 if (map.getLayer('pref-line-overlay')) {
