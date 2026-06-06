@@ -676,11 +676,13 @@
         ];
 
         let precSubMode = 'radar'; // 'radar' | 'amedas'
-        let radarFrames = [];      // [{time, path, isNowcast}]
+        let radarFrames = [];      // [{basetime, validtime, member, isNowcast}]
         let radarIndex = 0;
         let radarTimer = null;
         let radarLoaded = false;
-        // クロスフェード用: A/Bバッファを交互に使い、チラつきを防ぐ
+        let radarCurrentTileUrl  = null;  // 現在フレームのタイルURL（ズーム遷移時の再適用に使用）
+        let radarLastActiveKey   = null;  // 最後に setTiles() を呼んだ zoom-config キー
+        let radarFetchInProgress = false; // loadRadarFrames() の多重実行防止フラグ
 
         // 警報関連
         // 気象庁 offices コード（area.jsonのofficesキーと一致）
@@ -1300,6 +1302,9 @@
         }
 
         async function loadRadarFrames() {
+            // 多重実行防止: 前のフェッチが完了していない場合はスキップ
+            if (radarFetchInProgress) return;
+            radarFetchInProgress = true;
             // タブを再表示するたびに最新データを取得（5分ごとに更新されるため）
             try {
                 document.getElementById('status-bar').innerText = 'レーダーデータ取得中...';
@@ -1414,6 +1419,8 @@
             } catch (e) {
                 console.error('Radar load failed:', e);
                 document.getElementById('status-bar').innerText = 'レーダー取得失敗';
+            } finally {
+                radarFetchInProgress = false;
             }
         }
 
@@ -1421,11 +1428,21 @@
             if (!radarFrames.length || !map.getSource('radar-z4')) return;
             const frame = radarFrames[radarIndex];
 
-            // 全ソースのタイルURLを更新し、全レイヤーを表示（zoom範囲で自動的に1つだけ表示）
+            // 現在アクティブなズーム層のソースのみ setTiles() を呼ぶ
+            // 全ソース一括更新するとズーム遷移時に非アクティブソースのキャッシュも消えて空白が発生する
+            const tileUrl = radarTileUrl(frame.basetime, frame.member, frame.validtime);
+            const zoom = map.getZoom();
+            const activeCfg = RADAR_ZOOM_CONFIGS.find(c => zoom >= c.layerMin && zoom < c.layerMax)
+                           ?? RADAR_ZOOM_CONFIGS[RADAR_ZOOM_CONFIGS.length - 1];
             for (const cfg of RADAR_ZOOM_CONFIGS) {
-                map.getSource('radar-' + cfg.key).setTiles([radarTileUrl(frame.basetime, frame.member, frame.validtime)]);
+                if (!map.getSource('radar-' + cfg.key)) continue;
+                if (cfg.key === activeCfg.key) {
+                    map.getSource('radar-' + cfg.key).setTiles([tileUrl]);
+                }
                 map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'visible');
             }
+            radarCurrentTileUrl = tileUrl;
+            radarLastActiveKey  = activeCfg.key;
 
             // スライダーとラベルを更新
             document.getElementById('radar-slider').value = radarIndex;
@@ -1813,6 +1830,23 @@
                     map.on('click', 'layer-points', (e) => showDetail(e.features[0].properties));
                     map.on('click', 'layer-wind', (e) => showDetail(e.features[0].properties));
                     map.on('click', 'layer-typhoon-center', (e) => showDetail(e.features[0].properties));
+
+                    // ズーム遷移でアクティブ層が変わった際、新しいソースにタイルURLを適用
+                    // updateRadarFrame() はアクティブソースのみ setTiles() するため、
+                    // ズームで別レイヤーが表示される瞬間に新ソースのキャッシュが空になる問題を防ぐ
+                    map.on('zoom', () => {
+                        if (!radarCurrentTileUrl || !radarFrames.length) return;
+                        if (currentMode !== 'prec' || precSubMode !== 'radar') return;
+                        const z = map.getZoom();
+                        const cfg = RADAR_ZOOM_CONFIGS.find(c => z >= c.layerMin && z < c.layerMax)
+                                 ?? RADAR_ZOOM_CONFIGS[RADAR_ZOOM_CONFIGS.length - 1];
+                        if (cfg.key === radarLastActiveKey) return; // 担当ソースに変化なし
+                        const src = map.getSource('radar-' + cfg.key);
+                        if (src) {
+                            src.setTiles([radarCurrentTileUrl]);
+                            radarLastActiveKey = cfg.key;
+                        }
+                    });
                     
                     // マウスカーソルをポインターにする
                     ['layer-points', 'layer-wind', 'layer-typhoon-center'].forEach(layer => {
