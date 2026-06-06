@@ -669,7 +669,7 @@
         // ズーム範囲ごとのsource設定（奇数ズームで偶数タイルを引き伸ばすための4分割）
         // source.maxzoom を偶数値にすることで、MapLibreが奇数ズームを自動拡大補完する
         const RADAR_ZOOM_CONFIGS = [
-            { key: 'z4',  srcMaxzoom: 4,  layerMin: 0,  layerMax: 4  }, // zoom 0-3:  z=4タイル使用
+            { key: 'z4',  srcMaxzoom: 4,  layerMin: 1,  layerMax: 4  }, // zoom 1-3:  z=4タイル使用（z=0はJMA未提供）
             { key: 'z6',  srcMaxzoom: 6,  layerMin: 4,  layerMax: 6  }, // zoom 4-5:  z=6タイル使用(zoom5は引き伸ばし)
             { key: 'z8',  srcMaxzoom: 8,  layerMin: 6,  layerMax: 8  }, // zoom 6-7:  z=8タイル使用(zoom7は引き伸ばし)
             { key: 'z10', srcMaxzoom: 10, layerMin: 8,  layerMax: 22 }, // zoom 8+:   z=10タイル使用(zoom9は引き伸ばし)
@@ -1428,21 +1428,15 @@
             if (!radarFrames.length || !map.getSource('radar-z4')) return;
             const frame = radarFrames[radarIndex];
 
-            // 現在アクティブなズーム層のソースのみ setTiles() を呼ぶ
-            // 全ソース一括更新するとズーム遷移時に非アクティブソースのキャッシュも消えて空白が発生する
+            // 全ソースのタイルURLを更新し、全レイヤーを表示
+            // （ズーム遷移時に新しいレイヤーが即座にタイルを持てるよう全ソースを同期する）
             const tileUrl = radarTileUrl(frame.basetime, frame.member, frame.validtime);
-            const zoom = map.getZoom();
-            const activeCfg = RADAR_ZOOM_CONFIGS.find(c => zoom >= c.layerMin && zoom < c.layerMax)
-                           ?? RADAR_ZOOM_CONFIGS[RADAR_ZOOM_CONFIGS.length - 1];
             for (const cfg of RADAR_ZOOM_CONFIGS) {
                 if (!map.getSource('radar-' + cfg.key)) continue;
-                if (cfg.key === activeCfg.key) {
-                    map.getSource('radar-' + cfg.key).setTiles([tileUrl]);
-                }
+                map.getSource('radar-' + cfg.key).setTiles([tileUrl]);
                 map.setLayoutProperty('layer-radar-' + cfg.key, 'visibility', 'visible');
             }
             radarCurrentTileUrl = tileUrl;
-            radarLastActiveKey  = activeCfg.key;
 
             // スライダーとラベルを更新
             document.getElementById('radar-slider').value = radarIndex;
@@ -1830,23 +1824,6 @@
                     map.on('click', 'layer-points', (e) => showDetail(e.features[0].properties));
                     map.on('click', 'layer-wind', (e) => showDetail(e.features[0].properties));
                     map.on('click', 'layer-typhoon-center', (e) => showDetail(e.features[0].properties));
-
-                    // ズーム遷移でアクティブ層が変わった際、新しいソースにタイルURLを適用
-                    // updateRadarFrame() はアクティブソースのみ setTiles() するため、
-                    // ズームで別レイヤーが表示される瞬間に新ソースのキャッシュが空になる問題を防ぐ
-                    map.on('zoom', () => {
-                        if (!radarCurrentTileUrl || !radarFrames.length) return;
-                        if (currentMode !== 'prec' || precSubMode !== 'radar') return;
-                        const z = map.getZoom();
-                        const cfg = RADAR_ZOOM_CONFIGS.find(c => z >= c.layerMin && z < c.layerMax)
-                                 ?? RADAR_ZOOM_CONFIGS[RADAR_ZOOM_CONFIGS.length - 1];
-                        if (cfg.key === radarLastActiveKey) return; // 担当ソースに変化なし
-                        const src = map.getSource('radar-' + cfg.key);
-                        if (src) {
-                            src.setTiles([radarCurrentTileUrl]);
-                            radarLastActiveKey = cfg.key;
-                        }
-                    });
                     
                     // マウスカーソルをポインターにする
                     ['layer-points', 'layer-wind', 'layer-typhoon-center'].forEach(layer => {
