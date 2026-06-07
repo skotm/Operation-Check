@@ -679,6 +679,16 @@
         let radarLoaded = false;
         let radarCurrentTileUrl  = null;  // 現在フレームのタイルURL
         let radarFetchInProgress = false; // loadRadarFrames() の多重実行防止フラグ
+        let _radarInitialized    = false; // 初回ロード済みフラグ（再ロード時にスライダーを保持するため）
+
+        // ============================================================
+        //  自動更新スケジューラー管理
+        // ============================================================
+        let _schedulerRadarTimeoutId   = null; // 雨雲レーダー 次回起動タイマー
+        let _schedulerAmedasTimeoutId  = null; // AMeDAS 次回起動タイマー
+        let _schedulerTyphoonTimeoutId = null; // 台風情報 次回起動タイマー
+        let _schedulerWarningIntervalId = null; // 気象警報・洪水情報 繰り返しインターバル
+        let _amedasLastTimestamp = '';          // AMeDAS 前回取得タイムスタンプ（差分検知用）
 
         // 警報関連
         // 気象庁 offices コード（area.jsonのofficesキーと一致）
@@ -760,6 +770,7 @@
         };
         // code → {level, kinds[]} の警報マップ（取得後に構築）
         let warningMap = {};          // regioncode → {level, kinds}
+        let warningLoaded = false;    // 警報データ初回取得済みフラグ
         let warningAreasGeojson = null;
 
         const arrowSvg = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1317,9 +1328,10 @@
             // 多重実行防止: 前のフェッチが完了していない場合はスキップ
             if (radarFetchInProgress) return;
             radarFetchInProgress = true;
+            const isRadarVisible = currentMode === 'prec';
             // タブを再表示するたびに最新データを取得（5分ごとに更新されるため）
             try {
-                document.getElementById('status-bar').innerText = 'レーダーデータ取得中...';
+                if (isRadarVisible) document.getElementById('status-bar').innerText = 'レーダーデータ取得中...';
                 const res = await fetch(
                     'https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json',
                     { cache: 'no-store' }
@@ -1367,12 +1379,22 @@
                 console.debug(`[Radar] 計${radarFrames.length}フレーム / 予測${radarFrames.filter(f=>f.isNowcast).length}件`);
                 // -------------------------------------------------------------
 
-                // スライダー max 設定・初期位置は最新の「観測」フレーム（予測ではなく実レーダーの最新）
+                // スライダー max を更新
+                // radarIndex は初回のみ「最新観測フレーム」に設定する。
+                // 再呼び出し時はユーザーが見ているフレームを保持するため強制リセットしない。
                 const slider = document.getElementById('radar-slider');
                 slider.max = radarFrames.length - 1;
                 const initIdx = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, radarFrames.length - 1);
-                slider.value = initIdx;
-                radarIndex = initIdx;
+                if (!_radarInitialized) {
+                    // 初回のみ最新観測フレームにセット
+                    slider.value = initIdx;
+                    radarIndex = initIdx;
+                    _radarInitialized = true;
+                } else {
+                    // 再取得時：radarIndexが新しいフレーム数を超えていたらクランプ
+                    radarIndex = Math.min(radarIndex, radarFrames.length - 1);
+                    slider.value = radarIndex;
+                }
 
                 // MapLibreにソース・レイヤーを追加（初回のみ）
                 // 気象庁は偶数ズーム(2,4,6,8,10)のみタイルを提供するため、
@@ -1424,16 +1446,16 @@
                         paint: { 'line-color': '#bbbbbb', 'line-width': 2.0, 'line-opacity': 1 }
                     });
                 }
-                // レーダーサブモードのみ表示（AMeDAS観測値モードでは非表示）
-                const overlayVis = precSubMode === 'radar' ? 'visible' : 'none';
+                // 境界線オーバーレイは「precタブ かつ radarサブモード」のときのみ表示
+                const overlayVis = (currentMode === 'prec' && precSubMode === 'radar') ? 'visible' : 'none';
                 map.setLayoutProperty('world-line-overlay', 'visibility', overlayVis);
                 map.setLayoutProperty('pref-line-overlay',  'visibility', overlayVis);
 
                 updateRadarFrame();
-                document.getElementById('status-bar').innerText = 'LIVE: レーダー表示中';
+                if (isRadarVisible) document.getElementById('status-bar').innerText = 'LIVE: レーダー表示中';
             } catch (e) {
                 console.error('Radar load failed:', e);
-                document.getElementById('status-bar').innerText = 'レーダー取得失敗';
+                if (isRadarVisible) document.getElementById('status-bar').innerText = 'レーダー取得失敗';
             } finally {
                 radarFetchInProgress = false;
             }
@@ -1443,14 +1465,16 @@
             if (!radarFrames.length || !map.getSource(`${RADAR_SRC}-z2`)) return;
             const frame = radarFrames[radarIndex];
 
-            // 全偶数ズームソースのタイルURLを一括更新してレイヤーを表示
+            // タイルURLを最新フレームに更新（表示中かどうかに関わらず常に実施）
+            // visibility の変更は prec タブ表示中のみ行う（他タブ滞在中に勝手に表示させない）
+            const shouldShow = currentMode === 'prec';
             RADAR_ZOOM_LEVELS.forEach(({ z }) => {
                 const srcId = `${RADAR_SRC}-z${z}`;
                 const lyrId = `${RADAR_LYR}-z${z}`;
                 if (map.getSource(srcId)) {
                     map.getSource(srcId).setTiles([radarTileUrl(frame.basetime, frame.member, frame.validtime, z)]);
                 }
-                if (map.getLayer(lyrId)) {
+                if (shouldShow && map.getLayer(lyrId)) {
                     map.setLayoutProperty(lyrId, 'visibility', 'visible');
                 }
             });
@@ -1540,6 +1564,7 @@
             if (mode === 'radar') {
                 // ---- 雨雲レーダーモード ----
                 sliderBar.classList.add('visible');
+                document.getElementById('status-bar').innerText = 'LIVE: レーダー表示中';
                 if (map.getLayer('layer-points')) {
                     map.setLayoutProperty('layer-points', 'visibility', 'none');
                 }
@@ -1549,6 +1574,8 @@
                 // スライダー非表示・再生停止
                 sliderBar.classList.remove('visible');
                 stopRadarPlay();
+                document.getElementById('status-bar').innerText =
+                    currentObsTime !== '--:--' ? `LIVE: ${currentObsTime} 観測` : 'AMeDASデータ読込中...';
 
                 // レーダーを最新観測フレームに固定して背景表示
                 if (radarFrames.length > 0) {
@@ -1763,10 +1790,11 @@
 
                     // --- AMeDASデータの取得 ---
                     const timeRes = await fetch(`${JMA_BASE}/data/latest_time.txt`);
-                    const datetime = (await timeRes.text()).trim(); 
+                    const datetime = (await timeRes.text()).trim();
+                    _amedasLastTimestamp = datetime; // スケジューラーの差分チェック基準として記録
                     const mapTime = datetime.replace(/[-T:]/g, '').substring(0, 14);
                     currentObsTime = `${mapTime.substring(8,10)}:${mapTime.substring(10,12)}`;
-                    document.getElementById('status-bar').innerText = `LIVE: ${currentObsTime} 更新`;
+                    document.getElementById('status-bar').innerText = `LIVE: ${currentObsTime} 観測`;
 
                     const [tableRes, dataRes] = await Promise.all([
                         fetch(`${JMA_BASE}/const/amedastable.json`),
@@ -1850,9 +1878,281 @@
                     });
 
                     setMode('temp', false);
+                    startAllSchedulers();
                 } catch (e) { console.error("Initialization failed:", e); }
 
             });
+        }
+
+        // ============================================================
+        //  自動更新：各データリフレッシュ関数
+        // ============================================================
+
+        // --- 雨雲レーダー更新 ---
+        async function refreshRadar() {
+            try {
+                const t0 = performance.now();
+                await loadRadarFrames();
+                const elapsed = Math.round(performance.now() - t0);
+
+                // AMeDASサブモード かつ precタブ表示中 → 最新観測フレームに固定
+                if (currentMode === 'prec' && precSubMode === 'amedas') {
+                    radarIndex = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, radarFrames.length - 1);
+                    updateRadarFrame();
+                }
+
+                const latest = radarFrames[radarFrames.length - 1];
+                const obs    = radarFrames.filter(f => !f.isNowcast);
+                const nowc   = radarFrames.filter(f =>  f.isNowcast);
+                console.log(
+                    `[レーダー] 更新完了 ${elapsed}ms | ` +
+                    `全${radarFrames.length}フレーム (観測${obs.length}件 / 予測${nowc.length}件) | ` +
+                    `最新basetime: ${latest?.basetime ?? '-'} | validtime: ${latest?.validtime ?? '-'}`
+                );
+            } catch (e) {
+                console.warn('[レーダー] 更新失敗:', e);
+            }
+        }
+
+        // --- 台風情報更新 ---
+        async function refreshTyphoon() {
+            try {
+                const t0         = performance.now();
+                const newGeojson = await fetchTyphoonData();
+                const elapsed    = Math.round(performance.now() - t0);
+                typhoonGeojson   = newGeojson;
+                if (map.getSource('typhoon')) map.getSource('typhoon').setData(typhoonGeojson);
+                // マーカーの再生成は台風タブ表示中のみ（バックグラウンド時はスキップ、タブ切り替え時に setMode が呼ぶ）
+                if (currentMode === 'typhoon') {
+                    clearForecastTimeMarkers();
+                    updateForecastTimeMarkers(true);
+                }
+                const tcCount = newGeojson.features?.filter(f => f.properties?.type === 'center').length ?? 0;
+                console.log(`[台風] 更新完了 ${elapsed}ms | 活動中台風: ${tcCount}件`);
+            } catch (e) {
+                console.warn('[台風] 更新失敗:', e);
+            }
+        }
+
+        // --- 気象警報・洪水情報更新 ---
+        async function refreshWarning() {
+            try {
+                const t0 = performance.now();
+                warningMap = {};
+                await Promise.all([fetchWarningData(), fetchFloodWarningData()]);
+                const elapsed      = Math.round(performance.now() - t0);
+                const regionCount  = Object.keys(warningMap).length;
+                applyWarningColors();
+                warningLoaded = true;
+                if (currentMode === 'warning') {
+                    document.getElementById('status-bar').innerText = '警報情報 更新済';
+                    updateRanking();
+                }
+                console.log(`[警報] 更新完了 ${elapsed}ms | 警報発令地域: ${regionCount}件`);
+            } catch (e) {
+                console.warn('[警報] 更新失敗:', e);
+            }
+        }
+
+        // ============================================================
+        //  自動更新：スケジューラー本体
+        // ============================================================
+
+        // 次の「intervalMin分刻みの正刻 + offsetMs」までの待機ミリ秒を計算する
+        function msUntilNextTick(intervalMin, offsetMs = 0) {
+            const now    = Date.now();
+            const intMs  = intervalMin * 60 * 1000;
+            const tickMs = Math.ceil(now / intMs) * intMs + offsetMs;
+            return tickMs - now;
+        }
+
+        // ---- カウントダウンロガー ----
+        // 各スケジューラーの次回発火予定時刻を記録し、毎分コンソールに残り時間を表示する
+        const _nextFireAt = { radar: 0, amedas: 0, typhoon: 0, warning: 0 };
+        let _countdownIntervalId = null;
+
+        function startCountdownLogger() {
+            if (_countdownIntervalId) clearInterval(_countdownIntervalId);
+            _countdownIntervalId = setInterval(() => {
+                const now = Date.now();
+                const fmt = ms => {
+                    if (ms <= 0) return '間もなく';
+                    const s = Math.round(ms / 1000);
+                    const m = Math.floor(s / 60);
+                    return m > 0 ? `${m}分${s % 60}秒後` : `${s}秒後`;
+                };
+                console.log(
+                    `[カウントダウン ${new Date().toLocaleTimeString('ja-JP')}] ` +
+                    `レーダー: ${fmt(_nextFireAt.radar - now)} | ` +
+                    `AMeDAS: ${fmt(_nextFireAt.amedas - now)} | ` +
+                    `台風: ${fmt(_nextFireAt.typhoon - now)} | ` +
+                    `警報: ${fmt(_nextFireAt.warning - now)}`
+                );
+            }, 60_000);
+        }
+
+        // ---- レーダースケジューラー ----
+        // 毎時 0,5,10...55 分 + 2分10秒 に雨雲レーダーを更新
+        // 気象庁のタイル配信には正刻から約2分かかるため2分遅延を設ける
+        function scheduleRadar() {
+            const OFFSET = 2 * 60_000 + 10_000; // 2分10秒
+            const wait   = msUntilNextTick(5, OFFSET);
+            const fireAt = Date.now() + wait;
+            _nextFireAt.radar = fireAt;
+            _schedulerRadarTimeoutId = setTimeout(async () => {
+                const startTime = new Date();
+                console.log(`[レーダー] 取得開始 ${startTime.toLocaleTimeString('ja-JP')}`);
+                await refreshRadar();
+                scheduleRadar();
+            }, wait);
+            console.log(`[レーダー] 次回取得: ${new Date(fireAt).toLocaleTimeString('ja-JP')} (${Math.round(wait/1000)}秒後)`);
+        }
+
+        // ---- AMeDASスケジューラー ----
+        // 毎時 0,10,20,30,40,50 分 + 10秒 に latest_time.txt をポーリング開始。
+        // タイムスタンプに変化があれば観測データを取得する。
+        // 変化がなければ 30秒後に再ポーリングを最大10回（計5分）繰り返す。
+        function scheduleAmedas() {
+            const OFFSET      = 10_000; // 正刻から+10秒
+            const RETRY_MS    = 30_000; // 変化なし時の再ポーリング間隔
+            const MAX_RETRIES = 10;     // 最大再試行回数
+
+            const wait   = msUntilNextTick(10, OFFSET);
+            const fireAt = Date.now() + wait;
+            _nextFireAt.amedas = fireAt;
+
+            _schedulerAmedasTimeoutId = setTimeout(async () => {
+                console.log(`[AMeDAS] ポーリング開始 ${new Date().toLocaleTimeString('ja-JP')}`);
+                let retries = 0;
+
+                const poll = async () => {
+                    try {
+                        const url     = `${JMA_BASE}/data/latest_time.txt`;
+                        const timeRes = await fetch(url, { cache: 'no-store' });
+                        if (!timeRes.ok) {
+                            console.warn(`[AMeDAS] latest_time.txt 取得失敗 HTTP ${timeRes.status}`);
+                            scheduleAmedas();
+                            return;
+                        }
+                        const datetime = (await timeRes.text()).trim();
+                        console.log(
+                            `[AMeDAS] latest_time.txt="${datetime}" | 前回="${_amedasLastTimestamp}" | ` +
+                            `試行${retries + 1}/${MAX_RETRIES}回目`
+                        );
+
+                        if (datetime === _amedasLastTimestamp) {
+                            retries++;
+                            if (retries >= MAX_RETRIES) {
+                                console.warn(`[AMeDAS] ${MAX_RETRIES}回ポーリングしても変化なし → 次サイクルへ`);
+                                scheduleAmedas();
+                                return;
+                            }
+                            console.log(`[AMeDAS] 変化なし → ${RETRY_MS / 1000}秒後に再ポーリング (${retries}/${MAX_RETRIES})`);
+                            _schedulerAmedasTimeoutId = setTimeout(poll, RETRY_MS);
+                            return;
+                        }
+
+                        // 変化あり → 観測データ取得
+                        console.log(`[AMeDAS] タイムスタンプ変化: "${_amedasLastTimestamp}" → "${datetime}"`);
+                        _amedasLastTimestamp = datetime;
+
+                        const mapTime  = datetime.replace(/[-T:]/g, '').substring(0, 14);
+                        const dataUrl  = `${JMA_BASE}/data/map/${mapTime}.json`;
+                        console.log(`[AMeDAS] 観測データ取得: ${dataUrl}`);
+                        const t0       = performance.now();
+                        const dataRes  = await fetch(dataUrl, { cache: 'no-store' });
+                        if (!dataRes.ok) {
+                            console.warn(`[AMeDAS] 観測データ取得失敗 HTTP ${dataRes.status}`);
+                            scheduleAmedas();
+                            return;
+                        }
+                        const amedasData   = await dataRes.json();
+                        const elapsed      = Math.round(performance.now() - t0);
+                        const stationCount = Object.keys(amedasData).length;
+                        console.log(`[AMeDAS] 取得完了: ${mapTime.substring(8,10)}:${mapTime.substring(10,12)} 観測 / ${stationCount}地点 / ${elapsed}ms`);
+
+                        geojson.features = geojson.features.map(f => {
+                            const id  = f.properties.id;
+                            const obs = amedasData[id];
+                            if (!obs) return f;
+                            const temp    = obs.temp            !== undefined ? obs.temp[0]            : null;
+                            const prec    = obs.precipitation1h !== undefined ? obs.precipitation1h[0] : null;
+                            const windSpd = obs.wind            !== undefined ? obs.wind[0]            : null;
+                            const windDir = obs.windDirection   !== undefined ? obs.windDirection[0]   : 0;
+                            const hum     = obs.humidity        !== undefined ? obs.humidity[0]        : null;
+                            return {
+                                ...f,
+                                properties: {
+                                    ...f.properties,
+                                    temp, prec, wind: windSpd, windDir, hum,
+                                    sortTemp:  temp    !== null ? temp           : -100,
+                                    sortPrec:  prec    !== null ? prec           : -1,
+                                    sortWind:  windSpd !== null ? windSpd        : -1,
+                                    sizeTemp:  temp    !== null ? Math.abs(temp) : 0,
+                                    sizePrec:  prec    !== null ? prec           : 0,
+                                    tempColor: getTempColor(temp),
+                                    precColor: getPrecColor(prec),
+                                }
+                            };
+                        });
+
+                        if (map.getSource('amedas')) map.getSource('amedas').setData(geojson);
+
+                        currentObsTime = `${mapTime.substring(8,10)}:${mapTime.substring(10,12)}`;
+                        if (currentMode === 'temp' || currentMode === 'wind' ||
+                            (currentMode === 'prec' && precSubMode === 'amedas')) {
+                            document.getElementById('status-bar').innerText = `LIVE: ${currentObsTime} 観測`;
+                        }
+                        scheduleAmedas();
+
+                    } catch (e) {
+                        console.warn('[AMeDAS] ポーリング中にエラー:', e);
+                        scheduleAmedas();
+                    }
+                };
+
+                await poll();
+            }, wait);
+
+            console.log(`[AMeDAS] 次回ポーリング開始: ${new Date(fireAt).toLocaleTimeString('ja-JP')} (${Math.round(wait/1000)}秒後)`);
+        }
+
+        // ---- 台風スケジューラー ----
+        // 毎時 0 分 + 10秒 に台風情報を更新
+        function scheduleTyphoon() {
+            const wait   = msUntilNextTick(60, 10_000);
+            const fireAt = Date.now() + wait;
+            _nextFireAt.typhoon = fireAt;
+            _schedulerTyphoonTimeoutId = setTimeout(async () => {
+                console.log(`[台風] 取得開始 ${new Date().toLocaleTimeString('ja-JP')}`);
+                await refreshTyphoon();
+                scheduleTyphoon();
+            }, wait);
+            console.log(`[台風] 次回取得: ${new Date(fireAt).toLocaleTimeString('ja-JP')} (${Math.round(wait/1000)}秒後)`);
+        }
+
+        // ---- 警報スケジューラー ----
+        // 起動から5分おきに警報・洪水情報を更新
+        function scheduleWarning() {
+            const INTERVAL = 5 * 60_000;
+            const fireAt   = Date.now() + INTERVAL;
+            _nextFireAt.warning = fireAt;
+            _schedulerWarningIntervalId = setInterval(async () => {
+                _nextFireAt.warning = Date.now() + INTERVAL;
+                console.log(`[警報] 取得開始 ${new Date().toLocaleTimeString('ja-JP')}`);
+                await refreshWarning();
+            }, INTERVAL);
+            console.log(`[警報] 次回取得: ${new Date(fireAt).toLocaleTimeString('ja-JP')} (${Math.round(INTERVAL/1000)}秒後)`);
+        }
+
+        // ---- 全スケジューラー起動 ----
+        function startAllSchedulers() {
+            scheduleRadar();
+            scheduleAmedas();
+            scheduleTyphoon();
+            scheduleWarning();
+            startCountdownLogger();
+            console.log('[スケジューラー] 全スケジューラー起動完了');
         }
 
         function handleNavClick(mode) {
@@ -1896,6 +2196,17 @@
             currentMode = mode;
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             if(mode !== 'rank') document.getElementById(`btn-${mode}`).classList.add('active');
+
+            // タブ切り替え時にステータスバーをモードに応じた内容に更新
+            const statusEl = document.getElementById('status-bar');
+            if (mode === 'temp' || mode === 'wind') {
+                statusEl.innerText = currentObsTime !== '--:--' ? `LIVE: ${currentObsTime} 観測` : 'AMeDASデータ読込中...';
+            } else if (mode === 'typhoon') {
+                statusEl.innerText = '台風情報';
+            } else if (mode === 'warning') {
+                statusEl.innerText = warningLoaded ? '警報情報' : '警報データ取得中...';
+            }
+            // prec(雨雲・降水)モードは setPrecSubMode 内で設定するためここでは設定しない
 
             // 降水サブモード切り替えボタンの表示制御
             const precToggle = document.getElementById('prec-sub-toggle');
@@ -1946,7 +2257,14 @@
                 map.setLayoutProperty('layer-warning-line', 'visibility', warningVis);
 
                 if (mode === 'warning') {
-                    loadWarningMode();
+                    if (!warningLoaded) {
+                        // 初回のみ取得（以降は5分スケジューラーの refreshWarning が更新）
+                        loadWarningMode();
+                    } else {
+                        // 取得済みのデータをそのまま表示（再取得しない）
+                        document.getElementById('status-bar').innerText = '警報情報';
+                        updateRanking();
+                    }
                 }
 
                 if (mode === 'temp') {
@@ -1980,6 +2298,7 @@
                 fetchFloodWarningData()
             ]);
             applyWarningColors();
+            warningLoaded = true;
             document.getElementById('status-bar').innerText = `警報情報 更新済`;
             if (currentMode === 'warning') {
                 updateRanking();
