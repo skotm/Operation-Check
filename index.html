@@ -1269,9 +1269,25 @@
 
         // 気象庁 高解像度降水ナウキャスト タイルURL生成
         // basetime: API取得時刻文字列, validtime: 対象時刻文字列
-        function radarTileUrl(basetime, member, validtime) {
+        // zoomLevel: 偶数ズームを固定指定（気象庁は偶数ズームのみ提供）
+        function radarTileUrl(basetime, member, validtime, zoomLevel) {
+            if (zoomLevel !== undefined) {
+                // 固定ズームURL: {x}/{y} のみ可変、z は固定値
+                return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/${member}/${validtime}/surf/hrpns/${zoomLevel}/{x}/{y}.png`;
+            }
             return `https://www.jma.go.jp/bosai/jmatile/data/nowc/${basetime}/${member}/${validtime}/surf/hrpns/{z}/{x}/{y}.png`;
         }
+
+        // 気象庁が提供する偶数ズームレベル一覧
+        // 各ソースは [minzoom, maxzoom] の範囲で担当し、奇数ズームでは1段下の偶数ズームタイルをオーバーズームで表示
+        // 例: z=5（奇数）→ z=4ソースが maxzoom:5 まで担当（z=4タイルを引き伸ばして表示）
+        const RADAR_ZOOM_LEVELS = [
+            { z: 2, minzoom: 1, maxzoom: 3  },
+            { z: 4, minzoom: 3, maxzoom: 5  },
+            { z: 6, minzoom: 5, maxzoom: 7  },
+            { z: 8, minzoom: 7, maxzoom: 9  },
+            { z: 10, minzoom: 9, maxzoom: 22 },
+        ];
 
         // validtime文字列 (yyyyMMddHHmmss) はUTC格納
         // JSTに変換して表示用Dateを返す（.getUTC*() でJSTとして読む）
@@ -1359,29 +1375,36 @@
                 radarIndex = initIdx;
 
                 // MapLibreにソース・レイヤーを追加（初回のみ）
-                // 単一ソース構成: MapLibreが {z} を自動補完するため分割不要
-                // source.maxzoom: 10 = JMAがhrpnsを提供する上限（それ以上はオーバーズーム）
+                // 気象庁は偶数ズーム(2,4,6,8,10)のみタイルを提供するため、
+                // ズームレベルごとに独立したソースを登録し、奇数ズームでは
+                // 1段下の偶数ズームタイルをオーバーズームで表示して空白を防ぐ。
                 const firstFrame = radarFrames[radarIndex];
                 const radarAttr = "<a href='https://www.jma.go.jp/bosai/nowc/' target='_blank'>気象庁 高解像度降水ナウキャスト</a>";
-                if (!map.getSource(RADAR_SRC)) {
-                    map.addSource(RADAR_SRC, {
-                        type: 'raster',
-                        tiles: [radarTileUrl(firstFrame.basetime, firstFrame.member, firstFrame.validtime)],
-                        tileSize: 256,
-                        minzoom: 1,
-                        maxzoom: 10,
-                        attribution: radarAttr
-                    });
-                    map.addLayer({
-                        id: RADAR_LYR,
-                        type: 'raster',
-                        source: RADAR_SRC,
-                        minzoom: 1,
-                        maxzoom: 22,
-                        layout: { visibility: 'none' },
-                        paint: { 'raster-opacity': 0.75 }
-                    }, 'layer-points');
-                }
+                RADAR_ZOOM_LEVELS.forEach(({ z, minzoom, maxzoom }) => {
+                    const srcId = `${RADAR_SRC}-z${z}`;
+                    const lyrId = `${RADAR_LYR}-z${z}`;
+                    if (!map.getSource(srcId)) {
+                        map.addSource(srcId, {
+                            type: 'raster',
+                            // 固定ズームURLで {z} は使わず z を埋め込み済み、{x}/{y} のみ可変
+                            tiles: [radarTileUrl(firstFrame.basetime, firstFrame.member, firstFrame.validtime, z)],
+                            tileSize: 256,
+                            minzoom: 0,
+                            maxzoom: z, // このソースが持つタイルの上限ズーム
+                            bounds: [118, 20, 150, 48],
+                            attribution: radarAttr
+                        });
+                        map.addLayer({
+                            id: lyrId,
+                            type: 'raster',
+                            source: srcId,
+                            minzoom, // このレイヤーが表示される下限
+                            maxzoom, // このレイヤーが表示される上限（次の偶数ソースに引き継ぐ）
+                            layout: { visibility: 'none' },
+                            paint: { 'raster-opacity': 0.75 }
+                        }, 'layer-points');
+                    }
+                });
 
                 // 境界線オーバーレイ: レーダータイルの前面に国境・都道府県境を描画
                 // addLayer に beforeId を指定しないことでスタック最上位に配置される
@@ -1417,15 +1440,21 @@
         }
 
         function updateRadarFrame() {
-            if (!radarFrames.length || !map.getSource(RADAR_SRC)) return;
+            if (!radarFrames.length || !map.getSource(`${RADAR_SRC}-z2`)) return;
             const frame = radarFrames[radarIndex];
 
-            // 単一ソースのタイルURLを更新してレイヤーを表示
-            const tileUrl = radarTileUrl(frame.basetime, frame.member, frame.validtime);
-            if (!map.getSource(RADAR_SRC)) return;
-            map.getSource(RADAR_SRC).setTiles([tileUrl]);
-            map.setLayoutProperty(RADAR_LYR, 'visibility', 'visible');
-            radarCurrentTileUrl = tileUrl;
+            // 全偶数ズームソースのタイルURLを一括更新してレイヤーを表示
+            RADAR_ZOOM_LEVELS.forEach(({ z }) => {
+                const srcId = `${RADAR_SRC}-z${z}`;
+                const lyrId = `${RADAR_LYR}-z${z}`;
+                if (map.getSource(srcId)) {
+                    map.getSource(srcId).setTiles([radarTileUrl(frame.basetime, frame.member, frame.validtime, z)]);
+                }
+                if (map.getLayer(lyrId)) {
+                    map.setLayoutProperty(lyrId, 'visibility', 'visible');
+                }
+            });
+            radarCurrentTileUrl = radarTileUrl(frame.basetime, frame.member, frame.validtime, 10);
 
             // スライダーとラベルを更新
             document.getElementById('radar-slider').value = radarIndex;
@@ -1521,26 +1550,26 @@
                 sliderBar.classList.remove('visible');
                 stopRadarPlay();
 
-                // 境界線オーバーレイを非表示（観測値モードでは不要）
-                if (map.getLayer('pref-line-overlay')) {
-                    map.setLayoutProperty('world-line-overlay', 'visibility', 'none');
-                    map.setLayoutProperty('pref-line-overlay',  'visibility', 'none');
-                }
-
-                // レーダーを現在時刻（最新フレーム）に固定して表示
+                // レーダーを最新観測フレームに固定して背景表示
                 if (radarFrames.length > 0) {
-                    radarIndex = radarFrames.length - 1;
+                    radarIndex = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, radarFrames.length - 1);
                     updateRadarFrame();
                 } else {
                     loadRadarFrames().then(() => {
-                        radarIndex = radarFrames.length - 1;
+                        radarIndex = radarFrames.reduce((best, f, i) => !f.isNowcast ? i : best, radarFrames.length - 1);
                         updateRadarFrame();
                         sliderBar.classList.remove('visible');
                         stopRadarPlay();
                     });
                 }
 
-                // 観測点を前面に（layer-radarより上になるようmoveLayerで最上位に）
+                // 境界線オーバーレイを前面に表示（レーダー背景の上に重ねる）
+                if (map.getLayer('pref-line-overlay')) {
+                    map.setLayoutProperty('world-line-overlay', 'visibility', 'visible');
+                    map.setLayoutProperty('pref-line-overlay',  'visibility', 'visible');
+                }
+
+                // 観測点を最前面に（レーダー・境界線より上）
                 if (map.getLayer('layer-points')) {
                     map.moveLayer('layer-points'); // 引数なし = 最上位へ
                     map.setLayoutProperty('layer-points', 'visibility', 'visible');
@@ -1877,8 +1906,11 @@
                 // precタブを離れたらレーダーを非表示・再生停止
                 document.getElementById('radar-slider-bar').classList.remove('visible');
                 stopRadarPlay();
-                if (map.getLayer(RADAR_LYR)) {
-                    map.setLayoutProperty(RADAR_LYR, 'visibility', 'none');
+                if (map.getLayer(`${RADAR_LYR}-z2`)) {
+                    RADAR_ZOOM_LEVELS.forEach(({ z }) => {
+                        const lyrId = `${RADAR_LYR}-z${z}`;
+                        if (map.getLayer(lyrId)) map.setLayoutProperty(lyrId, 'visibility', 'none');
+                    });
                 }
                 // 境界線オーバーレイも非表示
                 if (map.getLayer('pref-line-overlay')) {
