@@ -2502,9 +2502,9 @@
             riskLoaded = true;
             const attr = "<a href='https://www.jma.go.jp/bosai/risk/' target='_blank'>気象庁 危険度分布（キキクル）</a>";
 
-            // キキクルラスタータイル：単一ソース・単一レイヤー（3タイプ × 1ソース = 3ソース）
-            // 気象庁は z=4〜10 のタイルを提供。z=10 以上はオーバーズームで表示。
-            // bounds で日本域外のリクエストを抑制。
+            // キキクルラスタータイル：z=10 タイルのみ取得してオーバーズーム・アンダーズームで全域表示
+            // minzoom=maxzoom=10 にすることで常に z=10 タイルだけをリクエストし無駄な通信を排除
+            // レイヤーの minzoom=4 で表示開始ズームを制御（タイル取得とは独立）
             ['land', 'inund', 'flood'].forEach(type => {
                 const srcId = `${RISK_SRC_PREFIX}-${type}`;
                 const lyrId = `${RISK_LYR_PREFIX}-${type}`;
@@ -2513,14 +2513,13 @@
                     type: 'raster',
                     tiles: [riskTileUrl(frame.basetime, frame.validtime, type)],
                     tileSize: 256,
-                    minzoom: 4,   // 気象庁が提供する最小ズーム
-                    maxzoom: 10,  // 気象庁が提供する最大ズーム（以降はオーバーズーム）
-                    bounds: [118, 20, 150, 48], // 日本域に限定してリクエスト抑制
+                    minzoom: 10, // z=10 タイルのみ取得
+                    maxzoom: 10,
+                    bounds: [118, 20, 150, 48],
                     attribution: attr
                 });
                 map.addLayer({
                     id: lyrId, type: 'raster', source: srcId,
-                    minzoom: 4, // z=4 未満では表示しない
                     layout: { visibility: 'none' },
                     paint: { 'raster-opacity': 0.8 }
                 }, 'pref-line-overlay');
