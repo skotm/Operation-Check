@@ -2697,7 +2697,7 @@
         function showRiverLayers() {
             if (map.getLayer('layer-river-riskline')) map.setLayoutProperty('layer-river-riskline', 'visibility', 'visible');
             if (map.getLayer('layer-river-name'))     map.setLayoutProperty('layer-river-name',     'visibility', 'visible');
-            // 初回表示時のみ診断を実行
+            // 洪水モード切替時に毎回診断を実行（_riverDiagDone は setRiskLayer でリセット）
             if (!window._riverDiagDone) {
                 window._riverDiagDone = true;
                 debugRiverLayer();
@@ -2708,41 +2708,44 @@
         async function debugRiverLayer() {
             console.group('[河川診断] flood_riskline タイル診断開始');
 
-            // テスト用タイル座標（東京付近 z=8/x=227/y=100）
-            const z = 8, x = 227, y = 100;
+            // 基準座標：関東（36°N, 140°E）付近
+            const lat = 36.0, lon = 140.0;
 
-            // 1a. 静的URL（/data/map/none/none/none/）
-            const staticUrl = `https://www.jma.go.jp/bosai/jmatile/data/map/none/none/none/surf/flood_riskline/${z}/${x}/${y}.pbf`;
-            await testTileXhr('[1a] 静的URL', staticUrl);
+            // 1. 複数ズームレベルで静的URLをテスト（データが存在するズームを特定）
+            console.log('[1] ズームレベル別タイル検索（静的URL）...');
+            for (const z of [7, 8, 9, 10, 11]) {
+                const n = Math.pow(2, z);
+                const x = Math.floor((lon + 180) / 360 * n);
+                const lat_r = lat * Math.PI / 180;
+                const y = Math.floor((1 - Math.log(Math.tan(lat_r) + 1 / Math.cos(lat_r)) / Math.PI) / 2 * n);
+                const url = `https://www.jma.go.jp/bosai/jmatile/data/map/none/none/none/surf/flood_riskline/${z}/${x}/${y}.pbf`;
+                await testTileXhr(`[z=${z}] x=${x} y=${y}`, url);
+            }
 
-            // 1b. 動的URL（/data/risk/{bt}/{vt}/）- 最新フレームを使用
+            // 2. 最新フレームで動的URLをテスト
             if (riskFrames.length > 0) {
                 const frame = riskFrames[riskIndex];
-                const dynUrl = riskVectorUrl(frame.basetime, frame.validtime, 'flood_riskline')
-                    .replace('{z}', z).replace('{x}', x).replace('{y}', y);
-                await testTileXhr(`[1b] 動的URL (bt=${frame.basetime})`, dynUrl);
-            } else {
-                console.warn('[1b] riskFrames 未取得のためスキップ');
+                console.log('[2] 動的URL (最新フレーム) をテスト...');
+                for (const z of [8, 9, 10]) {
+                    const n = Math.pow(2, z);
+                    const x = Math.floor((lon + 180) / 360 * n);
+                    const lat_r = lat * Math.PI / 180;
+                    const y = Math.floor((1 - Math.log(Math.tan(lat_r) + 1 / Math.cos(lat_r)) / Math.PI) / 2 * n);
+                    const url = `https://www.jma.go.jp/bosai/jmatile/data/risk/${frame.basetime}/none/${frame.validtime}/surf/flood_riskline/${z}/${x}/${y}.pbf`;
+                    await testTileXhr(`[動的 z=${z}]`, url);
+                }
             }
 
-            // 2. source-layer名の探索（タイル読み込み後）
-            await new Promise(r => setTimeout(r, 2500));
-            console.log('[2] source-layer名を探索中...');
-            const candidates = ['flood_riskline', 'river', 'riskline', 'flood', 'default', 'layer', 'floodRiskLine', 'flood-riskline'];
-            let found = false;
+            // 3. source-layer名の探索
+            await new Promise(r => setTimeout(r, 3000));
+            console.log('[3] source-layer探索 (zoom:', map.getZoom().toFixed(1), ')...');
+            const candidates = ['flood_riskline', 'river', 'riskline', 'flood', 'default'];
             for (const sl of candidates) {
                 try {
-                    const features = map.querySourceFeatures(RIVER_SRC, { sourceLayer: sl });
-                    if (features.length > 0) {
-                        console.log(`[2] ✅ source-layer="${sl}": ${features.length}件`);
-                        console.log('[2] プロパティ:', JSON.stringify(features[0].properties));
-                        found = true;
-                        break;
-                    }
+                    const f = map.querySourceFeatures(RIVER_SRC, { sourceLayer: sl });
+                    console.log(`[3] "${sl}": ${f.length}件 ${f.length > 0 ? '✅' : ''}`);
+                    if (f.length > 0) { console.log('[3] プロパティ:', JSON.stringify(f[0].properties)); break; }
                 } catch (e) { /* ignore */ }
-            }
-            if (!found) {
-                console.warn('[2] ❌ フィーチャなし (zoom:', map.getZoom().toFixed(1), ')');
             }
             console.groupEnd();
         }
@@ -2754,20 +2757,16 @@
                 xhr.responseType = 'arraybuffer';
                 xhr.onload = () => {
                     const bytes = xhr.response ? xhr.response.byteLength : -1;
-                    const cors = xhr.getResponseHeader('Access-Control-Allow-Origin') || '(なし)';
                     if (xhr.status === 200 && bytes > 0) {
-                        console.log(`${label}: ✅ HTTP200 ${bytes}バイト CORS=${cors}`);
-                    } else if (xhr.status === 200 && bytes === 0) {
-                        console.warn(`${label}: ⚠️ HTTP200 だが0バイト（空タイル）`);
+                        console.log(`${label}: ✅ ${bytes}バイト ← データあり！`);
+                    } else if (xhr.status === 200) {
+                        console.log(`${label}: 空 (0バイト)`);
                     } else {
-                        console.warn(`${label}: ❌ HTTP${xhr.status}`);
+                        console.warn(`${label}: HTTP${xhr.status}`);
                     }
                     resolve();
                 };
-                xhr.onerror = () => {
-                    console.error(`${label}: ❌ XHR失敗（CORS or ネットワークエラー）`);
-                    resolve();
-                };
+                xhr.onerror = () => { console.error(`${label}: XHR失敗（CORS?）`); resolve(); };
                 xhr.send();
             });
         }
@@ -2952,6 +2951,8 @@
             // 河川レイヤーを一旦非表示（updateRiskFrame内で洪水モード時のみ表示）
             if (map.getLayer('layer-river-riskline')) map.setLayoutProperty('layer-river-riskline', 'visibility', 'none');
             if (map.getLayer('layer-river-name'))     map.setLayoutProperty('layer-river-name',     'visibility', 'none');
+            // 洪水モードに切り替えたとき診断を再実行できるようフラグをリセット
+            if (layer === 'flood' || layer === 'rain') window._riverDiagDone = false;
 
             // targetTimesのURLがタイプグループ間で変わる場合はフレームを再ロードする
             // グループA (targetTimes.json):  land, flood
