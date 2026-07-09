@@ -474,6 +474,9 @@
         #reset-view-btn:active { transform: scale(0.9); }
 
         .forecast-time-marker {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             padding: 4px 10px;
             border-radius: 999px;
             background: rgba(0, 0, 0, 0.72);
@@ -486,6 +489,16 @@
             text-shadow: 0 1px 2px #000;
             pointer-events: auto;
             cursor: pointer;
+        }
+        .forecast-time-marker .fc-class-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: rgba(154, 160, 166, 0.95);
+            color: #1a1a1a;
+            text-shadow: none;
+            white-space: nowrap;
         }
 
         /* 警報バッジ */
@@ -1275,7 +1288,19 @@
 
                     const el = document.createElement('div');
                     el.className = 'forecast-time-marker';
-                    el.textContent = label;
+                    if (feature.properties.weakened && feature.properties.category) {
+                        // 「熱帯低気圧(TD)」のように括弧付きで格納されているため、日本語部分のみ短く表示する
+                        const classText = String(feature.properties.category).split('(')[0] || feature.properties.category;
+                        const timeEl = document.createElement('span');
+                        timeEl.textContent = label;
+                        const badgeEl = document.createElement('span');
+                        badgeEl.className = 'fc-class-badge';
+                        badgeEl.textContent = classText;
+                        el.appendChild(timeEl);
+                        el.appendChild(badgeEl);
+                    } else {
+                        el.textContent = label;
+                    }
                     el.onclick = (event) => {
                         event.stopPropagation();
                         showDetail(feature.properties);
@@ -3227,7 +3252,6 @@
             if (props.type === 'center' || props.type === 'forecastCircle') {
                 document.getElementById('st-time').innerText = props.forecastTime ? `${props.forecastTime} 予測` : `現在位置と勢力`;
                 grid.innerHTML = `
-                    <div class="data-item"><span class="data-label">種別</span><span class="data-value" style="font-size:14px;${props.weakened ? ' color:#AAAAAA;' : ''}">${props.category || '-'}</span></div>
                     <div class="data-item"><span class="data-label">大きさ</span><span class="data-value" style="font-size:14px;">${props.scale}</span></div>
                     <div class="data-item"><span class="data-label">勢力</span><span class="data-value" style="font-size:14px;">${props.intensity}</span></div>
                     <div class="data-item"><span class="data-label">移動</span><span class="data-value" style="font-size:14px;">${props.speed}</span></div>
