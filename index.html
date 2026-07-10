@@ -3255,13 +3255,16 @@
 
             if (props.type === 'center' || props.type === 'forecastCircle') {
                 document.getElementById('st-time').innerText = props.forecastTime ? `${props.forecastTime} 予測` : `現在位置と勢力`;
+                const hasWindValue = (val) => val != null && val !== '' && val !== '不明';
+                const windDisplay = hasWindValue(props.maxWind) ? props.maxWind : '-';
+                const gustDisplay = hasWindValue(props.maxGust) ? props.maxGust : '-';
                 grid.innerHTML = `
                     <div class="data-item"><span class="data-label">大きさ</span><span class="data-value" style="font-size:14px;">${props.scale}</span></div>
                     <div class="data-item"><span class="data-label">勢力</span><span class="data-value" style="font-size:14px;">${props.intensity}</span></div>
                     <div class="data-item"><span class="data-label">移動</span><span class="data-value" style="font-size:14px;">${props.speed}</span></div>
                     <div class="data-item"><span class="data-label">中心気圧</span><span class="data-value">${props.pressure}<span>hPa</span></span></div>
-                    <div class="data-item"><span class="data-label">最大風速</span><span class="data-value">${props.maxWind}<span>m/s</span></span></div>
-                    <div class="data-item"><span class="data-label">最大瞬間風速</span><span class="data-value">${props.maxGust}<span>m/s</span></span></div>
+                    <div class="data-item"><span class="data-label">最大風速</span><span class="data-value">${windDisplay}<span>${hasWindValue(props.maxWind) ? 'm/s' : ''}</span></span></div>
+                    <div class="data-item"><span class="data-label">最大瞬間風速</span><span class="data-value">${gustDisplay}<span>${hasWindValue(props.maxGust) ? 'm/s' : ''}</span></span></div>
                 `;
             } else {
                 document.getElementById('st-time').innerText = `${currentObsTime} 観測`;
