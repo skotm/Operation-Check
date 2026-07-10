@@ -1490,9 +1490,14 @@
                         speed: specNow.speed?.['km/h'] ? `${specNow.course || ''} ${specNow.speed['km/h']}km/h`.trim() : (specNow.course || '-')
                     }));
 
-                    const stormRadiusKm = getJMATyphoonRadiusKm(current.stormWarningArea?.arc?.[0]?.[1]);
+                    // 暴風警戒域（輪郭線）の元データを先に確定させ、暴風域の塗りもここから同じ円弧を使う
+                    // → 別々の値を使うと、実況位置のズレによって塗りと輪郭線の"現在側"が一致しなくなるため
+                    const stormWarningSource = points.slice().reverse().find(item => item.stormWarningArea?.arc?.length);
+                    const currentStormArc = current.stormWarningArea?.arc?.[0] || stormWarningSource?.stormWarningArea?.arc?.[0];
+                    const stormAreaCenter = parseJMACoord(currentStormArc?.[0]) || centerPos;
+                    const stormRadiusKm = getJMATyphoonRadiusKm(currentStormArc?.[1]);
                     if (stormRadiusKm) {
-                        features.push(turf.circle(centerPos, stormRadiusKm, { steps: 64, units: 'kilometers', properties: { type: 'stormArea' } }));
+                        features.push(turf.circle(stormAreaCenter, stormRadiusKm, { steps: 64, units: 'kilometers', properties: { type: 'stormArea' } }));
                     }
 
                     const galeRadiusKm = getJMATyphoonRadiusKm(current.galeWarningArea?.radius);
@@ -1514,7 +1519,6 @@
                         features.push(turf.lineString(forecastTrack, { type: 'track' }));
                     }
 
-                    const stormWarningSource = points.slice().reverse().find(item => item.stormWarningArea?.arc?.length);
                     const stormWarningArea = buildStormWarningAreaFeature(stormWarningSource?.stormWarningArea);
                     if (stormWarningArea) {
                         features.push(stormWarningArea);
