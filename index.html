@@ -3255,7 +3255,7 @@
 
             if (props.type === 'center' || props.type === 'forecastCircle') {
                 document.getElementById('st-time').innerText = props.forecastTime ? `${props.forecastTime} 予測` : `現在位置と勢力`;
-                const hasWindValue = (val) => val != null && val !== '' && val !== '不明';
+                const hasWindValue = (val) => val != null && val !== '' && val !== '不明' && Number(val) !== 0;
                 const windDisplay = hasWindValue(props.maxWind) ? props.maxWind : '-';
                 const gustDisplay = hasWindValue(props.maxGust) ? props.maxGust : '-';
                 grid.innerHTML = `
